@@ -1,6 +1,6 @@
 # LorisLabsKit
 
-[![CI](https://github.com/lorislabs/LorisLabsKit/actions/workflows/ci.yml/badge.svg)](https://github.com/lorislabs/LorisLabsKit/actions/workflows/ci.yml)
+[![CI](https://github.com/lowrisk75/LorisLabsKit/actions/workflows/ci.yml/badge.svg)](https://github.com/lowrisk75/LorisLabsKit/actions/workflows/ci.yml)
 
 Shared SwiftUI utilities for the LorisLabs app portfolio. Built for iOS 17+, macOS 14+, tvOS 17+, watchOS 10+, visionOS 1+.
 
