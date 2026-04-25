@@ -1,0 +1,11 @@
+.DS_Store
+.build/
+.swiftpm/
+*.xcodeproj/
+Packages/
+Package.resolved
+xcuserdata/
+DerivedData/
+*.xcscmblueprint
+*.xccheckout
+.netrc
