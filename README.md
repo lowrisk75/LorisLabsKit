@@ -92,6 +92,67 @@ if let recorded = referrals.recordIncomingReferral(code: incoming) {
 }
 ```
 
+## ReferralKit
+
+Server-backed refer-a-friend program. Drop-in for any LorisLabs app.
+
+### Quickstart
+
+```swift
+import LorisLabsKit
+
+@main struct YourApp: App {
+    init() {
+        ReferralKit.configure(
+            bundleID: Bundle.main.bundleIdentifier!,
+            workerURL: URL(string: "https://referrals.lorislab.fr")!
+        )
+    }
+
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+                .task {
+                    await ReferralKit.shared.refresh(
+                        hmacSecret: AppSecrets.referralHmac
+                    )
+                }
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                    guard let url = activity.webpageURL,
+                          let link = ReferralDeepLink.parse(url) else { return }
+                    // Show ReferralRedeemView with link.code prefilled
+                }
+        }
+    }
+}
+```
+
+### Wiring entitlement into your gate
+
+```swift
+@Observable final class SubscriptionManager {
+    var hasPaidPro: Bool {
+        purchasedProductIDs.contains(...) || ReferralKit.shared.entitlement.isActive
+    }
+}
+```
+
+### Required app-side config
+
+| Key | Source |
+|---|---|
+| `bundleID` | `Bundle.main.bundleIdentifier` |
+| Worker URL | `https://referrals.lorislab.fr` |
+| `HMAC_<SLUG>` | xcconfig at build time (not committed) |
+| Associated domain entitlement | Add `applinks:r.lorislab.fr` to entitlements |
+
+### Views
+
+- `ReferralShareView` — referrer's share UI (+ progress bars, share sheet)
+- `ReferralRedeemView` — referee's code entry
+- `ReferralStatusBanner` — in-flight pipeline status
+- `ReferralAmbassadorBadge` — tier 5+ badge
+
 ## Adding to a project
 
 In Xcode: **File → Add Package Dependencies → Add Local…** → select this repo's path.
