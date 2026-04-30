@@ -4,6 +4,17 @@ All notable changes to LorisLabsKit are documented here.
 
 ## [0.3.0] — 2026-04-29
 
+### Added
+- `ReferralKit` namespace: end-to-end refer-a-friend integration with `referrals.lorislab.fr` worker.
+  - `ReferralKit.configure(bundleID:, workerURL:)`
+  - `ReferralIdentity` (iCloud Keychain UUID)
+  - `ReferralClient` (lookup / share / claim / me with HMAC verification)
+  - `ReferralCache` (keychain-backed offline cache)
+  - `ReferralEntitlement` (Observable bonus state)
+  - `ReferralDeepLink` (Universal Link parser)
+  - `ReferralPurchaseHelper` (StoreKit appAccountToken)
+  - SwiftUI views: `ReferralShareView`, `ReferralRedeemView`, `ReferralStatusBanner`, `ReferralAmbassadorBadge`
+
 ### Removed
 - Legacy `ReferralManager` (local-only code generator). Replaced by the
   new server-backed `ReferralKit` (worker-validated, HMAC-signed).

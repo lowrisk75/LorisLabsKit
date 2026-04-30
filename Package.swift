@@ -1,6 +1,6 @@
 // swift-tools-version: 6.0
 // LorisLabsKit — shared SwiftUI utilities for the LorisLabs portfolio
-// Version: 0.2.0 (see CHANGELOG.md)
+// Version: 0.3.0 (see CHANGELOG.md)
 import PackageDescription
 
 let package = Package(

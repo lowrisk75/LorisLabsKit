@@ -4,7 +4,7 @@
 
 Shared SwiftUI utilities for the LorisLabs app portfolio. Built for iOS 17+, macOS 14+, tvOS 17+, watchOS 10+, visionOS 1+.
 
-Current version: **0.2.0** — see [CHANGELOG.md](CHANGELOG.md).
+Current version: **0.3.0** — see [CHANGELOG.md](CHANGELOG.md).
 
 ## What's inside
 
@@ -76,20 +76,6 @@ LorisLabsPaywallView(
 You can also build `PaywallTier` directly from a StoreKit `Product`:
 ```swift
 let tier = PaywallTier(product: product, isPopular: true, saveBadge: "Save 44%")
-```
-
-### `ReferralManager`
-App-side referral foundation: 8-character Crockford-base32 share codes, persistent in `UserDefaults`, with self-referral and double-redemption guards. Per-app StoreKit Promotional Offer integration is the host's responsibility.
-
-```swift
-let referrals = ReferralManager(appBundleIdentifier: Bundle.main.bundleIdentifier!)
-let myCode = referrals.generateCodeForCurrentUser()
-let url = referrals.shareURL(for: myCode.code)  // https://lorislab.fr/r/<CODE>
-
-// On incoming code (deep link / share):
-if let recorded = referrals.recordIncomingReferral(code: incoming) {
-    // Hand off to your StoreKit Promotional Offer flow
-}
 ```
 
 ## ReferralKit
