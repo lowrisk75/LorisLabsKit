@@ -2,6 +2,12 @@
 
 All notable changes to LorisLabsKit are documented here.
 
+## [0.3.0] — 2026-04-29
+
+### Removed
+- Legacy `ReferralManager` (local-only code generator). Replaced by the
+  new server-backed `ReferralKit` (worker-validated, HMAC-signed).
+
 ## [0.2.0] — 2026-04-25
 
 ### Added
