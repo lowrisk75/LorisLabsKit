@@ -47,9 +47,3 @@ public final class ReferralKit {
         _shared = nil
     }
 }
-
-/// Stub — full implementation lands in Task R7.
-@MainActor
-public final class ReferralEntitlement {
-    public init() {}
-}
