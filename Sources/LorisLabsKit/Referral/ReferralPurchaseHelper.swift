@@ -8,15 +8,24 @@ public enum ReferralPurchaseHelper {
         case userCancelled
         case pending
         case unknownPurchaseResult
+        case unsupportedPlatform
     }
 
     /// Call this when you have a `claimNonce` from `ReferralClient.lookup(...)`
     /// and a `Product` to buy. Returns the `Transaction` after verification, or
     /// throws on cancel / pending.
+    ///
+    /// `Product.purchase(options:)` is iOS / macOS / tvOS / watchOS only —
+    /// visionOS uses a different StoreKit purchase entry point and is not
+    /// supported by ReferralKit V1. Calls from visionOS throw
+    /// `HelperError.unsupportedPlatform`.
     public static func purchase(
         product: Product,
         claimNonce: String
     ) async throws -> StoreKit.Transaction {
+        #if os(visionOS)
+        throw HelperError.unsupportedPlatform
+        #else
         guard let token = UUID(uuidString: claimNonce) else {
             throw HelperError.invalidNonce
         }
@@ -38,5 +47,6 @@ public enum ReferralPurchaseHelper {
         @unknown default:
             throw HelperError.unknownPurchaseResult
         }
+        #endif
     }
 }
