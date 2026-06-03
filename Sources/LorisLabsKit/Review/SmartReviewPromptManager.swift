@@ -180,6 +180,9 @@ public final class SmartReviewPromptManager {
 
     // MARK: - Triggering
 
+    // RequestReviewAction / SKStoreReviewController are unavailable on tvOS
+    // (no App Store review prompts on Apple TV), so both entry points are gated.
+    #if !os(tvOS)
     /// Asks SwiftUI's `RequestReviewAction` to show the prompt — but only if criteria are met.
     /// Records the prompt so future calls obey the cooldown.
     public func requestIfAppropriate(via action: RequestReviewAction) {
@@ -187,8 +190,9 @@ public final class SmartReviewPromptManager {
         action()
         recordPromptShown()
     }
+    #endif
 
-    #if canImport(UIKit) && !os(watchOS)
+    #if canImport(UIKit) && !os(watchOS) && !os(tvOS)
     /// Use this when called from a non-SwiftUI context (e.g. UIKit).
     public func requestIfAppropriate(in scene: UIWindowScene) {
         guard shouldPromptNow else { return }

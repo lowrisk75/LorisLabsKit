@@ -10,18 +10,25 @@ import SwiftUI
 /// ```
 public struct ReviewPromptOnAppearModifier: ViewModifier {
     private let manager: SmartReviewPromptManager
+    // `requestReview` (RequestReviewAction) is unavailable on tvOS.
+    #if !os(tvOS)
     @Environment(\.requestReview) private var requestReview
+    #endif
 
     public init(manager: SmartReviewPromptManager) {
         self.manager = manager
     }
 
     public func body(content: Content) -> some View {
+        #if os(tvOS)
+        content // No App Store review prompt on tvOS — no-op.
+        #else
         content.task {
             // 0.5s delay so the success view actually renders before the prompt appears.
             try? await Task.sleep(for: .milliseconds(500))
             manager.requestIfAppropriate(via: requestReview)
         }
+        #endif
     }
 }
 

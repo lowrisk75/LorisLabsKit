@@ -74,14 +74,24 @@ public struct ReferralShareView: View {
         }
     }
 
+    @ViewBuilder
     private func shareButton(code: String) -> some View {
-        ShareLink(item: linkURL(code: code)) {
-            Label("Share", systemImage: "square.and.arrow.up")
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(.tint, in: .rect(cornerRadius: 10))
-                .foregroundStyle(.white)
+        let label = Label("Share", systemImage: "square.and.arrow.up")
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(.tint, in: .rect(cornerRadius: 10))
+            .foregroundStyle(.white)
+        #if os(tvOS)
+        // tvOS has no ShareLink — surface the referral link as copyable text.
+        VStack(spacing: 6) {
+            label
+            Text(linkURL(code: code).absoluteString)
+                .font(.caption2.monospaced())
+                .foregroundStyle(.secondary)
         }
+        #else
+        ShareLink(item: linkURL(code: code)) { label }
+        #endif
     }
 
     private func linkURL(code: String) -> URL {
