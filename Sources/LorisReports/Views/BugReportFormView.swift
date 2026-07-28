@@ -223,9 +223,18 @@ public struct BugReportFormView: View {
         let url = await provider.generateBundle(transcript: summary)
         await MainActor.run {
             if let url {
+                #if canImport(UIKit) && !os(watchOS)
                 self.bundleURL = url
                 self.showShareSheet = true
                 self.phase = .followUp
+                #else
+                // macOS: the provider delivers the bundle itself (Mail/Finder).
+                // The package ShareSheet is a stub on this platform — showing it
+                // would strand the user. See BugReportConversationView.
+                _ = url
+                self.phase = .followUp
+                dismiss()
+                #endif
             } else {
                 self.errorMessage = String(localized: "Couldn't package the diagnostic data.", bundle: .module)
                 self.phase = .error

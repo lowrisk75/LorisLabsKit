@@ -2,6 +2,21 @@
 
 All notable changes to LorisLabsKit are documented here.
 
+## [0.4.1] — 2026-07-28
+
+### Fixed — `LorisReports` bundle delivery on macOS
+- `BugReportConversationView.generateBundle()` and `BugReportFormView.generateBundle()`
+  presented the package's `ShareSheet` on every platform. On macOS that view is only a
+  stub reading *"Sharing not yet supported on this platform — open the bundle URL
+  manually"*, so a macOS user who generated a report hit a dead end and had no way to
+  send it. Both call sites are now platform-aware: iOS keeps the share sheet, while
+  non-UIKit targets dismiss and leave delivery to the host's
+  `BugReportContextProvider.generateBundle` (open Mail, reveal in Finder…).
+- Ported from Clasp's fork, which carried the correct behaviour. **TypeMetrics** (macOS,
+  already on `LorisReports` and shipping) is fixed by this change too.
+- Verified: `swift build` (macOS, exercises the new branch) and
+  `xcodebuild -destination 'generic/platform=iOS'` both succeed.
+
 ## [0.4.0] — 2026-07-25
 
 ### Added — "app chassis" v2 (modular products; apps import only what they use)

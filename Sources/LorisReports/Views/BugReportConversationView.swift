@@ -227,10 +227,18 @@ public struct BugReportConversationView: View {
         defer { isGeneratingBundle = false }
         let url = await conversation.generateBundle()
         await MainActor.run {
-            if let url {
-                self.bundleURL = url
-                self.showShareSheet = true
-            }
+            guard let url else { return }
+            #if canImport(UIKit) && !os(watchOS)
+            self.bundleURL = url
+            self.showShareSheet = true
+            #else
+            // On macOS the provider's `generateBundle` owns the delivery step
+            // (opening Mail, revealing in Finder…). Presenting the package's
+            // ShareSheet here would show the "not supported on this platform"
+            // stub — a dead end. Close instead and let the host finish.
+            _ = url
+            dismiss()
+            #endif
         }
     }
 }
