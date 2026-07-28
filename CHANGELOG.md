@@ -2,6 +2,25 @@
 
 All notable changes to LorisLabsKit are documented here.
 
+## [0.4.0] — 2026-07-25
+
+### Added — "app chassis" v2 (modular products; apps import only what they use)
+- `LorisSync` — protocol-abstracted CloudKit sync engine (seeded from Mela/ProfileSyncKit,
+  the best-abstracted of the portfolio's 9 hand-rolled sync engines).
+- `LorisReports` — in-app bug reports + triage, with localization and tests (seeded from
+  Lumen's BugReportKit, canonical of the 5 divergent forks: Clasp/404/Lumen/lumen-bridge/TypeMetrics).
+- `LorisDesignCore` — shared `LorisDesignTokens` + canonical `GlassCard` (ported from
+  404/PulseUI, the richest of the 4 copies: contrast/reduce-transparency aware, macOS
+  variant, Liquid Glass border on iOS 18+).
+- `Licensing/` in LorisLabsKit: `TrialManager` (keychain-backed trial clock, per-bundle
+  namespace) and `LicenseVerifier` + `LicenseStore` (offline RS256 JWT verification,
+  parameterized issuer/product/public-key/machine-id) — generalized from Throttle's
+  TrialService/LicenseService so the license worker pattern works for every app.
+
+### Notes
+- Existing `LorisLabsKit` target untouched — Clasp's and Lumen's imports keep working.
+- Clasp now consumes the package via a relative symlink (its stale git clone is gone).
+
 ## [0.3.0] — 2026-04-29
 
 ### Added

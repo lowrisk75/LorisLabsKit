@@ -1,0 +1,506 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ""
+          }
+        }
+      }
+    },
+    " issue": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " incident"
+          }
+        }
+      }
+    },
+    "%@ · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@ · %2$@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@"
+          }
+        }
+      }
+    },
+    "%@ %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@ %2$@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %@"
+          }
+        }
+      }
+    },
+    "A couple of follow-ups": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelques questions de suivi"
+          }
+        }
+      }
+    },
+    "A short description in your own words. We'll figure out what diagnostic info to attach automatically.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une courte description avec tes mots. On attachera automatiquement les bonnes infos de diagnostic."
+          }
+        }
+      }
+    },
+    "Analyzing your description…": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Analyse de ta description…"
+          }
+        }
+      }
+    },
+    "App layout / navigation": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mise en page / navigation"
+          }
+        }
+      }
+    },
+    "Apple Intelligence is unavailable on this device.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence n'est pas disponible sur cet appareil."
+          }
+        }
+      }
+    },
+    "Apple Watch": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Watch"
+          }
+        }
+      }
+    },
+    "Are you using a reverse proxy or tunnel?": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tu utilises un reverse proxy ou un tunnel ?"
+          }
+        }
+      }
+    },
+    "Can you attach a screenshot or screen recording?": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tu peux joindre une capture ou un enregistrement d'écran ?"
+          }
+        }
+      }
+    },
+    "Continue": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continuer"
+          }
+        }
+      }
+    },
+    "Couldn't package the diagnostic data.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible d'empaqueter les données de diagnostic."
+          }
+        }
+      }
+    },
+    "Critical": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Critique"
+          }
+        }
+      }
+    },
+    "Describe what's wrong…": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Décris ce qui ne va pas…"
+          }
+        }
+      }
+    },
+    "Description": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Description"
+          }
+        }
+      }
+    },
+    "e.g. live streams won't load on iPhone": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ex. les flux en direct ne chargent pas sur iPhone"
+          }
+        }
+      }
+    },
+    "Events / detections": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Évènements / détections"
+          }
+        }
+      }
+    },
+    "Generate": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Générer"
+          }
+        }
+      }
+    },
+    "Generate Report": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Générer le rapport"
+          }
+        }
+      }
+    },
+    "Hi! I'm here to help report a bug. Tell me what's not working in your own words — I'll figure out what diagnostic info to attach.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bonjour ! Je vais t'aider à signaler un bug. Décris ce qui ne marche pas avec tes mots — je m'occupe d'attacher les bonnes infos de diagnostic."
+          }
+        }
+      }
+    },
+    "Hit a snag thinking that through. Want to retry?": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "J'ai eu un souci en réfléchissant. On retente ?"
+          }
+        }
+      }
+    },
+    "How can we reproduce it?": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comment on peut reproduire ?"
+          }
+        }
+      }
+    },
+    "How serious is it?": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "C'est grave ?"
+          }
+        }
+      }
+    },
+    "I've got everything I need. Tap Generate Report below — I'll attach only the relevant bits.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "J'ai tout ce qu'il me faut. Appuie sur Générer le rapport ci-dessous — je n'attache que les infos pertinentes."
+          }
+        }
+      }
+    },
+    "Live streams / images": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flux en direct / images"
+          }
+        }
+      }
+    },
+    "Login / authentication": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connexion / authentification"
+          }
+        }
+      }
+    },
+    "Looks like a ": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On dirait un "
+          }
+        }
+      }
+    },
+    "Major": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Majeur"
+          }
+        }
+      }
+    },
+    "Minor": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mineur"
+          }
+        }
+      }
+    },
+    "Other": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autre"
+          }
+        }
+      }
+    },
+    "Packaging diagnostic data…": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Empaquetage des diagnostics…"
+          }
+        }
+      }
+    },
+    "Push notifications": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notifications push"
+          }
+        }
+      }
+    },
+    "Question": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Question"
+          }
+        }
+      }
+    },
+    "Recordings / clips": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrements / clips"
+          }
+        }
+      }
+    },
+    "Report a Bug": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Report a Bug"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signaler un bug"
+          }
+        }
+      }
+    },
+    "Send": {
+      "extractionState": "stale",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoyer"
+          }
+        }
+      }
+    },
+    "Send what we have": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoyer ce qu'on a"
+          }
+        }
+      }
+    },
+    "Severity": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gravité"
+          }
+        }
+      }
+    },
+    "Sharing not yet supported on this platform from inside the package — open the bundle URL manually.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le partage n’est pas encore pris en charge sur cette plateforme depuis le package — ouvrez l’URL du bundle manuellement."
+          }
+        }
+      }
+    },
+    "Something went wrong": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelque chose s'est mal passé"
+          }
+        }
+      }
+    },
+    "Tell us what's wrong": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dis-nous ce qui ne va pas"
+          }
+        }
+      }
+    },
+    "Try Again": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réessayer"
+          }
+        }
+      }
+    },
+    "When did this last work correctly?": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quand est-ce que ça marchait pour la dernière fois ?"
+          }
+        }
+      }
+    },
+    "Which cameras are affected?": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelles caméras sont affectées ?"
+          }
+        }
+      }
+    },
+    "Widgets": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Widgets"
+          }
+        }
+      }
+    },
+    "Wrap up + generate": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conclure + générer"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}
