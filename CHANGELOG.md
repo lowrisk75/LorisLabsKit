@@ -2,6 +2,41 @@
 
 All notable changes to LorisLabsKit are documented here.
 
+## [0.6.0] — 2026-07-29
+
+### Added — `LorisSync` sharing (`CKShare`)
+The last capability keeping six apps (Aura, Clasp, Éclair, Halte, Piscine, Velya)
+away from the shared engine.
+
+- `SharedCloudDatabase` — refines `CloudDatabase`, so non-sharing conformers and
+  mocks are untouched.
+  - `share(recordID:type:title:permission:)` → `ShareInfo`. **Idempotent**: CloudKit
+    refuses a second share on one record, so reuse is silent rather than an error
+    every caller must guard against.
+  - `existingShare(recordID:type:)`, `acceptShare(at:)`, `fetchShared(type:)`,
+    `stopSharing(recordID:type:)`.
+  - `accept(metadata:)` on `CloudKitDatabase` for the path the system actually
+    uses (`userDidAcceptCloudKitShareWith`).
+- `ShareInfo.isOwner` — owners revoke, participants leave. Conflating the two ships
+  a "Remove" button that fails for half the users.
+- `ShareError` — `invalidShare`, `recordNotFound`, `notOwner`.
+
+### The trap this locks down
+Shared records live in `sharedCloudDatabase`, a **different database** from the
+private one. `fetchAll` never returns them. An app that assumes one database shows
+the owner their own data and participants nothing at all — so
+`testSharedRecordsNeverAppearInThePrivateFetch` asserts the two stores stay
+separate, and the mock keeps them in separate dictionaries on purpose.
+
+### Notes
+- Seeded from Velya's `CloudKitShareManager`, the portfolio's most complete
+  implementation.
+- **10 new tests** (19 total for `LorisSync`): idempotent share, unknown record,
+  private/shared separation, double accept, malformed link, owner-revokes vs
+  participant-leaves.
+- Verified: `swift build` (macOS), `xcodebuild -destination 'generic/platform=iOS'`,
+  `swift test` — 36 tests, 0 failures.
+
 ## [0.5.0] — 2026-07-29
 
 ### Added — `LorisSync` can finally sync incrementally and be woken by push

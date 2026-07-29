@@ -7,7 +7,7 @@ import Foundation
 /// Models the two server behaviours that matter and are easy to get wrong:
 /// tokens advance monotonically, and a token the server no longer recognises
 /// forces a full snapshot rather than a silent partial answer.
-actor MockCloudDatabase: IncrementalCloudDatabase {
+actor MockCloudDatabase: IncrementalCloudDatabase, SharedCloudDatabase {
 
     // MARK: State
 
@@ -95,6 +95,62 @@ actor MockCloudDatabase: IncrementalCloudDatabase {
                            deletedIDs: deleted,
                            token: Self.encode(version),
                            wasReset: reset)
+    }
+
+    // MARK: SharedCloudDatabase
+
+    /// Records this user participates in. Deliberately a *separate* store from
+    /// `records`: CloudKit keeps shared data in another database, and a mock that
+    /// merged them would hide the bug it exists to catch.
+    private var sharedRecords: [String: SyncRecord] = [:]
+    private var shares: [String: ShareInfo] = [:]
+    private(set) var acceptedShareURLs: [URL] = []
+
+    /// Simulate another user having shared a record with us.
+    func receiveShare(_ record: SyncRecord, from url: URL) {
+        sharedRecords[record.id] = record
+        shares[record.id] = ShareInfo(url: url,
+                                      recordID: record.id,
+                                      isOwner: false,
+                                      participantCount: 2)
+    }
+
+    func share(recordID: String,
+               type: String,
+               title: String?,
+               permission: SharePermission) async throws -> ShareInfo {
+        guard status == .available else { throw SyncError.accountUnavailable }
+        if let existing = shares[recordID] { return existing }
+        guard records[recordID] != nil else { throw ShareError.recordNotFound }
+
+        let info = ShareInfo(url: URL(string: "https://www.icloud.com/share/\(recordID)")!,
+                             recordID: recordID,
+                             isOwner: true,
+                             participantCount: 1)
+        shares[recordID] = info
+        return info
+    }
+
+    func existingShare(recordID: String, type: String) async throws -> ShareInfo? {
+        shares[recordID]
+    }
+
+    func acceptShare(at url: URL) async throws {
+        guard status == .available else { throw SyncError.accountUnavailable }
+        guard url.absoluteString.contains("/share/") else { throw ShareError.invalidShare }
+        if !acceptedShareURLs.contains(url) { acceptedShareURLs.append(url) }
+    }
+
+    func fetchShared(type: String) async throws -> [SyncRecord] {
+        guard status == .available else { throw SyncError.accountUnavailable }
+        return sharedRecords.values.filter { $0.type == type }.sorted { $0.id < $1.id }
+    }
+
+    func stopSharing(recordID: String, type: String) async throws {
+        guard let info = shares[recordID] else { throw ShareError.recordNotFound }
+        shares.removeValue(forKey: recordID)
+        // A participant leaving loses access; an owner keeps the record.
+        if !info.isOwner { sharedRecords.removeValue(forKey: recordID) }
     }
 
     // MARK: Token codec (an Int, encoded opaquely like the real one)
