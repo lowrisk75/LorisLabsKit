@@ -2,6 +2,36 @@
 
 All notable changes to LorisLabsKit are documented here.
 
+## [0.7.0] — 2026-07-29
+
+### Changed — `SyncRecord` carries typed fields, not one opaque blob
+**This is what makes `LorisSync` adoptable at all.** Records modelled a payload as
+a single JSON `blob`, which fits the one app the engine was extracted from and *no
+other*: every app in the portfolio stores typed CloudKit fields — Éclair 168 of
+them, Clasp 23, 404 and Fleck 15, Aura 11, Aegis and ProofCheck 8-10. Adopting the
+engine would have meant rewriting each app's CloudKit schema and migrating live
+user data, and for a shared record, breaking participants still on the old version.
+
+- `SyncValue` — string, int, double, bool, date, data, stringList, intList.
+  `Codable`, so records can be cached offline.
+- `SyncRecord.fields: [String: SyncValue]`, plus typed accessors (`record.int("hour")`)
+  that return `nil` on a type mismatch rather than guessing.
+- `blob` survives as a **computed** field, so `CloudSyncEngine`'s `Codable` path and
+  every existing call site keep working untouched. A whole-payload JSON is now just
+  a field named `blob`.
+- `CloudKitDatabase` reads and writes the full schema: an app keeps its record
+  layout and needs **no migration**.
+
+### Notes
+- CloudKit has no boolean type — booleans are stored as numbers, so a round-trip
+  cannot tell `true` from `1`. `SyncValue.from` returns `.int` and callers use
+  `record.bool(_:)` only on fields they wrote as booleans; guessing would silently
+  corrupt integer fields holding 0 or 1.
+- **7 new tests** (26 total for `LorisSync`): typed round-trip, mismatch returns nil,
+  blob backwards compatibility, blob on a typed record, persistence, `Codable` values.
+- Verified: `swift build` (macOS), `xcodebuild -destination 'generic/platform=iOS'`,
+  `swift test` — 43 tests, 0 failures.
+
 ## [0.6.0] — 2026-07-29
 
 ### Added — `LorisSync` sharing (`CKShare`)

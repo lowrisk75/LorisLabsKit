@@ -3,7 +3,8 @@ import CloudKit
 import Foundation
 
 /// `CloudDatabase` backed by the user's **private** CloudKit database in a custom
-/// zone. Stores each payload as a JSON `blob` + a `modifiedAt` date.
+/// zone. Writes each record's typed fields (its existing CloudKit schema) plus a
+/// `modifiedAt` date; a whole-payload JSON is simply a `blob` field.
 ///
 /// NOTE: this concrete adapter is intentionally NOT unit-tested (CI never hits
 /// real iCloud). It must be verified on a real device once the container is
@@ -17,7 +18,6 @@ import Foundation
 public struct CloudKitDatabase: CloudDatabase {
     private let container: CKContainer
     private let zoneID: CKRecordZone.ID
-    private static let blobKey = "blob"
     private static let modifiedKey = "modifiedAt"
 
     public init(containerIdentifier: String, zoneName: String = "MelaProfilesZone") {
@@ -50,8 +50,7 @@ public struct CloudKitDatabase: CloudDatabase {
         await ensureZone()
         let ckRecords = records.map { r -> CKRecord in
             let record = CKRecord(recordType: r.type, recordID: .init(recordName: r.id, zoneID: zoneID))
-            record[Self.blobKey] = r.blob as CKRecordValue
-            record[Self.modifiedKey] = r.modifiedAt as CKRecordValue
+            r.apply(to: record, modifiedKey: Self.modifiedKey)
             return record
         }
         _ = try await database.modifyRecords(saving: ckRecords, deleting: [], savePolicy: .allKeys)
@@ -62,10 +61,8 @@ public struct CloudKitDatabase: CloudDatabase {
         let query = CKQuery(recordType: type, predicate: NSPredicate(value: true))
         let (matches, _) = try await database.records(matching: query, inZoneWith: zoneID)
         return matches.compactMap { _, result in
-            guard case .success(let record) = result,
-                  let blob = record[Self.blobKey] as? Data,
-                  let modified = record[Self.modifiedKey] as? Date else { return nil }
-            return SyncRecord(id: record.recordID.recordName, type: type, blob: blob, modifiedAt: modified)
+            guard case .success(let record) = result else { return nil }
+            return SyncRecord(from: record, type: type, modifiedKey: Self.modifiedKey)
         }
     }
 
@@ -122,13 +119,8 @@ extension CloudKitDatabase: IncrementalCloudDatabase {
         let newToken = result.changeToken
 
         let changed = modifications.compactMap { record -> SyncRecord? in
-            guard record.recordType == type,
-                  let blob = record[Self.blobKey] as? Data,
-                  let modified = record[Self.modifiedKey] as? Date else { return nil }
-            return SyncRecord(id: record.recordID.recordName,
-                              type: type,
-                              blob: blob,
-                              modifiedAt: modified)
+            guard record.recordType == type else { return nil }
+            return SyncRecord(from: record, type: type, modifiedKey: Self.modifiedKey)
         }
 
         return ZoneChanges(changed: changed,
@@ -235,12 +227,9 @@ extension CloudKitDatabase: SharedCloudDatabase {
             else { continue }
             for (_, result) in matches {
                 guard case .success(let record) = result,
-                      let blob = record[Self.blobKey] as? Data,
-                      let modified = record[Self.modifiedKey] as? Date else { continue }
-                out.append(SyncRecord(id: record.recordID.recordName,
-                                      type: type,
-                                      blob: blob,
-                                      modifiedAt: modified))
+                      let mapped = SyncRecord(from: record, type: type, modifiedKey: Self.modifiedKey)
+                else { continue }
+                out.append(mapped)
             }
         }
         return out.sorted { $0.id < $1.id }
