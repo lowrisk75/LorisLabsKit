@@ -2,6 +2,24 @@
 
 All notable changes to LorisLabsKit are documented here.
 
+## [0.4.2] — 2026-07-29
+
+### Fixed — `LorisDesignCore` high-contrast card border was invisible in light mode
+- `LorisDesignTokens.cardBorderHighContrast` defaulted to `.white.opacity(0.55)`.
+  That colour is applied only when the user has asked for increased contrast, and
+  on a light background a white border is exactly what they cannot see — the
+  setting made the card edge *less* visible for the people it exists to help.
+  Now `.primary.opacity(0.4)`, which adapts to the colour scheme. This is what
+  404's PulseUI used; the value was changed during the port into the kit.
+- Nothing consumes `LorisDesignCore` yet, so no app's appearance changes.
+- Verified: `swift build` (macOS) and `xcodebuild -destination 'generic/platform=iOS'`
+  both succeed.
+
+### Note for adopters
+`GlassCard` is **not** a drop-in swap. The kit's defaults differ from every existing
+copy — e.g. 404/PulseUI uses cornerRadius 20 against the kit's 14. Adopting apps must
+set `LorisDesignTokens.current` to their own values at launch to keep visual parity.
+
 ## [0.4.1] — 2026-07-28
 
 ### Fixed — `LorisReports` bundle delivery on macOS

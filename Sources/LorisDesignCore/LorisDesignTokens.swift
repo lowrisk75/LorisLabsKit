@@ -13,8 +13,14 @@ public struct LorisDesignTokens: Sendable {
 
     public init(cardCornerRadius: CGFloat = 14,
                 cardPadding: CGFloat = 14,
+                // A white border at rest reads as a highlight on glass, which is the
+                // intended look. The high-contrast variant is different: it exists so
+                // users who ask for increased contrast can actually see the card edge.
+                // `.white` there is invisible on a light background — exactly the
+                // people it is meant to serve get nothing. `.primary` adapts to the
+                // colour scheme, which is what PulseUI used before this was ported.
                 cardBorder: Color = .white.opacity(0.14),
-                cardBorderHighContrast: Color = .white.opacity(0.55),
+                cardBorderHighContrast: Color = .primary.opacity(0.4),
                 accent: Color = Color(red: 0, green: 0x71 / 255.0, blue: 0xE3 / 255.0)) {
         self.cardCornerRadius = cardCornerRadius
         self.cardPadding = cardPadding
