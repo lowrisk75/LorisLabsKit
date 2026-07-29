@@ -2,6 +2,47 @@
 
 All notable changes to LorisLabsKit are documented here.
 
+## [0.5.0] — 2026-07-29
+
+### Added — `LorisSync` can finally sync incrementally and be woken by push
+`LorisSync` shipped as a full-fetch engine: every sync re-downloaded the whole
+zone, with no server push and no way to learn about deletions. That is correct
+for the one small profile it was extracted from (Mela/ProfileSyncKit), and it is
+why **no app adopted it** — seven apps in the portfolio need `CKSubscription`
+and four need change tokens, so migrating would have *removed* capability.
+
+- `IncrementalCloudDatabase` — refines `CloudDatabase` rather than replacing it,
+  so existing conformers and mocks keep compiling untouched.
+  - `registerChangeSubscription(id:)` — silent push on zone change, idempotent.
+  - `fetchChanges(type:since:)` → `ZoneChanges` (changed, deletedIDs, token, wasReset).
+- `ZoneChanges.wasReset` — set when the server rejects an aged-out token. The
+  payload is then a full snapshot, not a delta; callers must replace rather than
+  merge. Getting this wrong loses records silently, which is why it is explicit.
+- Change tokens cross the API as opaque `Data`, so nothing above the CloudKit
+  adapter imports CloudKit.
+- `ChangeTokenStore` + `UserDefaultsChangeTokenStore` — persistence behind a
+  protocol (App Group suite when an extension syncs too; otherwise each process
+  keeps its own token and they fight). Stores the suite *name*, not a
+  `UserDefaults` instance, which is not Sendable under Swift 6.
+- Deletions now propagate. Without `deletedIDs`, a deleted record resurrects on
+  the next upload.
+
+### Fixed
+- `CloudKitDatabase`'s header claimed the engine was "fully tested against
+  `MockCloudDatabase`". No such mock and no `LorisSync` test target existed.
+  Both now do: **9 tests** covering token advance, empty deltas, deletion
+  propagation, expired-token reset, idempotent subscription, account gating and
+  the token store.
+
+### Notes
+- Seeded from Velya's `SharedAlarmSync`, the only engine in the portfolio with
+  subscriptions, change tokens and sharing together — following the rule that made
+  `LorisReports` succeed: **extract from the most complete implementation, not the
+  most elegant one.**
+- Still missing before this can replace a rich engine: `CKShare` (six apps use it).
+- Verified: `swift build` (macOS), `xcodebuild -destination 'generic/platform=iOS'`,
+  and `swift test` — 17 tests, 0 failures.
+
 ## [0.4.2] — 2026-07-29
 
 ### Fixed — `LorisDesignCore` high-contrast card border was invisible in light mode

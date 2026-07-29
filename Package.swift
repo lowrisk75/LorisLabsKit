@@ -34,5 +34,6 @@ let package = Package(
         .target(name: "LorisDesignCore"),
         .testTarget(name: "LorisLabsKitTests", dependencies: ["LorisLabsKit"]),
         .testTarget(name: "LorisReportsTests", dependencies: ["LorisReports"]),
+        .testTarget(name: "LorisSyncTests", dependencies: ["LorisSync"]),
     ]
 )
