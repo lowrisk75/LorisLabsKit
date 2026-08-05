@@ -42,6 +42,17 @@ public final class LorisPaywallStore {
     /// Set when a purchase or restore fails, for the view to display.
     public var lastError: String?
 
+    /// Fired when a consumable is bought, with its product identifier.
+    ///
+    /// Consumables never reach `Transaction.currentEntitlements`, so without
+    /// this a tip purchase completes and nothing in the app ever hears about it.
+    @ObservationIgnored public var onConsumablePurchase: ((String) -> Void)?
+
+    /// Fired after entitlements are refreshed, including from the background
+    /// transaction listener. Apps still on `ObservableObject` need it to know
+    /// when to republish their own state.
+    @ObservationIgnored public var onStateChange: (() -> Void)?
+
     // MARK: Dependencies
 
     private let configuration: PaywallConfiguration
@@ -87,17 +98,28 @@ public final class LorisPaywallStore {
 
     // MARK: Products
 
+    /// Loads the storefront, retrying with exponential backoff.
+    ///
+    /// A single attempt loses the whole paywall to one dropped packet — the
+    /// user sees an empty sheet and no way to pay.
     public func loadProducts() async {
         isLoadingProducts = true
         defer { isLoadingProducts = false }
-        do {
-            let loaded = try await Product.products(for: configuration.productIDs)
-            products = loaded.sorted { $0.price < $1.price }
-            didLoadProducts = true
-            isStoreReachable = true
-        } catch {
-            isStoreReachable = false
-            lastError = error.localizedDescription
+
+        for attempt in 1...configuration.productLoadRetries {
+            do {
+                let loaded = try await Product.products(for: configuration.productIDs)
+                products = loaded.sorted { $0.price < $1.price }
+                didLoadProducts = true
+                isStoreReachable = true
+                lastError = nil
+                return
+            } catch {
+                lastError = error.localizedDescription
+                isStoreReachable = false
+                guard attempt < configuration.productLoadRetries else { break }
+                try? await Task.sleep(for: .seconds(pow(2.0, Double(attempt - 1))))
+            }
         }
     }
 
@@ -160,6 +182,14 @@ public final class LorisPaywallStore {
             case .success(let verification):
                 let transaction = try Self.checkVerified(verification)
                 await transaction.finish()
+
+                if configuration.consumableProductIDs.contains(transaction.productID) {
+                    // A tip grants nothing durable — reporting it is the only
+                    // way the app can thank the buyer.
+                    onConsumablePurchase?(transaction.productID)
+                    return true
+                }
+
                 await refreshEntitlements()
                 return true
             case .userCancelled:
@@ -268,6 +298,7 @@ public final class LorisPaywallStore {
         entitlementsLoaded = true
 
         await refreshRenewalStatus()
+        onStateChange?()
     }
 
     /// Adopts a trial previously stored in `UserDefaults` by an older build.
@@ -349,6 +380,16 @@ public final class LorisPaywallStore {
         return Date().timeIntervalSince(lastVerified) < configuration.offlineTolerance
     }
 
+    // MARK: Consumables
+
+    private func isConsumable(_ productID: String) -> Bool {
+        configuration.consumableProductIDs.contains(productID)
+    }
+
+    private func reportConsumable(_ productID: String) {
+        onConsumablePurchase?(productID)
+    }
+
     // MARK: Scene resolution
 
     #if canImport(UIKit) && !os(watchOS)
@@ -378,6 +419,12 @@ public final class LorisPaywallStore {
                 guard let self else { return }
                 guard let transaction = try? Self.checkVerified(result) else { continue }
                 await transaction.finish()
+
+                if await self.isConsumable(transaction.productID) {
+                    await self.reportConsumable(transaction.productID)
+                    continue
+                }
+
                 await self.refreshEntitlements()
             }
         }

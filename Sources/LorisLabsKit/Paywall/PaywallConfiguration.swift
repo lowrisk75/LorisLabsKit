@@ -12,6 +12,17 @@ public struct PaywallConfiguration: Sendable {
     /// Products that grant permanent access once bought (non-consumables).
     public let lifetimeProductIDs: Set<String>
 
+    /// Consumables — tips, one-off unlocks that can be bought again.
+    ///
+    /// They never appear in `Transaction.currentEntitlements`, so an engine
+    /// that only reads entitlements sees a tip purchase as a no-op. Declaring
+    /// them here routes the purchase to `onConsumablePurchase` instead.
+    public let consumableProductIDs: Set<String>
+
+    /// How many times to retry a failed product load before giving up.
+    /// A single attempt loses the storefront to one dropped packet.
+    public let productLoadRetries: Int
+
     /// Subscription group used for renewal monitoring. When nil, the group of
     /// the first auto-renewable product found is used.
     public let subscriptionGroupID: String?
@@ -32,14 +43,18 @@ public struct PaywallConfiguration: Sendable {
     public init(
         productIDs: [String],
         lifetimeProductIDs: Set<String> = [],
+        consumableProductIDs: Set<String> = [],
         subscriptionGroupID: String? = nil,
         trialDuration: TimeInterval? = nil,
         offlineTolerance: TimeInterval = 24 * 60 * 60,
         expiringSoonThreshold: TimeInterval = 3 * 24 * 60 * 60,
+        productLoadRetries: Int = 3,
         keychainService: String = Bundle.main.bundleIdentifier ?? "com.lorislab.unknown"
     ) {
         self.productIDs = productIDs
         self.lifetimeProductIDs = lifetimeProductIDs
+        self.consumableProductIDs = consumableProductIDs
+        self.productLoadRetries = max(1, productLoadRetries)
         self.subscriptionGroupID = subscriptionGroupID
         self.trialDuration = trialDuration
         self.offlineTolerance = offlineTolerance
