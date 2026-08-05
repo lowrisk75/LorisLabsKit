@@ -35,6 +35,10 @@ public final class LorisPaywallStore {
     /// purchases and for users who never paid.
     public private(set) var subscriptionExpiration: Date?
 
+    /// Identifiers the user currently owns — lets a paywall tell which tier is
+    /// active instead of only whether *something* was bought.
+    public private(set) var purchasedProductIDs: Set<String> = []
+
     /// Set when a purchase or restore fails, for the view to display.
     public var lastError: String?
 
@@ -186,10 +190,13 @@ public final class LorisPaywallStore {
         var isLifetime = false
         var subscriptionExpiry: Date?
         var foundPaid = false
+        var owned: Set<String> = []
 
         for await result in Transaction.currentEntitlements {
             guard let transaction = try? Self.checkVerified(result) else { continue }
             guard transaction.revocationDate == nil else { continue }
+
+            owned.insert(transaction.productID)
 
             if configuration.lifetimeProductIDs.contains(transaction.productID) {
                 isLifetime = true
@@ -207,6 +214,7 @@ public final class LorisPaywallStore {
         }
 
         subscriptionExpiration = subscriptionExpiry
+        purchasedProductIDs = owned
 
         if foundPaid {
             cachePaidEntitlement(true)
