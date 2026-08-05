@@ -53,6 +53,23 @@ public struct LorisTrialService: Sendable {
         hasStarted && !isActive(now: now)
     }
 
+    /// Adopts a trial that an earlier version of the app stored in
+    /// `UserDefaults`, so migrating to the keychain neither restarts a running
+    /// trial nor hands a second one to someone who already used theirs.
+    ///
+    /// Safe to call on every launch: it only ever writes when the keychain has
+    /// no start date yet. Returns true when a legacy date was adopted.
+    @discardableResult
+    public func migrateLegacyStart(
+        fromUserDefaultsKey key: String,
+        defaults: UserDefaults = .standard
+    ) -> Bool {
+        guard startDate == nil,
+              let legacy = defaults.object(forKey: key) as? Date else { return false }
+        try? keychain.save(String(legacy.timeIntervalSince1970), forKey: Self.startKey)
+        return true
+    }
+
     /// Testing and support only — clears the stored start date.
     public func reset() {
         try? keychain.delete(forKey: Self.startKey)

@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import StoreKit
 
-#if os(iOS)
+#if canImport(UIKit)
 import UIKit
 #endif
 
@@ -22,6 +22,18 @@ public final class LorisPaywallStore {
     public private(set) var renewalStatus: RenewalStatus = .notSubscribed
     public private(set) var isLoadingProducts = false
     public private(set) var didLoadProducts = false
+
+    /// True once entitlements have been read at least once — including for
+    /// users who already paid.
+    ///
+    /// UI gates must wait for this before showing a paywall. Lumen shipped
+    /// without it and paying subscribers hit the paywall on every cold launch
+    /// until StoreKit finished reading entitlements (reported 2026-05-22).
+    public private(set) var entitlementsLoaded = false
+
+    /// Latest expiration seen across active entitlements; nil for lifetime
+    /// purchases and for users who never paid.
+    public private(set) var subscriptionExpiration: Date?
 
     /// Set when a purchase or restore fails, for the view to display.
     public var lastError: String?
@@ -108,7 +120,19 @@ public final class LorisPaywallStore {
     public func purchase(_ product: Product) async -> Bool {
         lastError = nil
         do {
-            let result = try await product.purchase()
+            let result: Product.PurchaseResult
+            #if os(tvOS) || os(visionOS)
+            // These platforms reject the plain purchase() call — it must be
+            // confirmed in a window scene, or the sheet never appears.
+            guard let scene = Self.activeWindowScene() else {
+                lastError = "No active window scene to present the purchase."
+                return false
+            }
+            result = try await product.purchase(confirmIn: scene)
+            #else
+            result = try await product.purchase()
+            #endif
+
             switch result {
             case .success(let verification):
                 let transaction = try Self.checkVerified(verification)
@@ -182,6 +206,8 @@ public final class LorisPaywallStore {
             }
         }
 
+        subscriptionExpiration = subscriptionExpiry
+
         if foundPaid {
             cachePaidEntitlement(true)
             entitlement = isLifetime ? .lifetime : .subscribed(expiration: subscriptionExpiry)
@@ -194,7 +220,17 @@ public final class LorisPaywallStore {
             entitlement = trialState()
         }
 
+        // Set last so an observer reacting to the flag also sees fresh state.
+        entitlementsLoaded = true
+
         await refreshRenewalStatus()
+    }
+
+    /// Adopts a trial previously stored in `UserDefaults` by an older build.
+    /// Call before `start()`. No-op when the keychain already holds a trial.
+    @discardableResult
+    public func migrateLegacyTrial(fromUserDefaultsKey key: String) -> Bool {
+        trial?.migrateLegacyStart(fromUserDefaultsKey: key) ?? false
     }
 
     private func trialState() -> EntitlementState {
@@ -268,6 +304,18 @@ public final class LorisPaywallStore {
         let lastVerified = Date(timeIntervalSince1970: seconds)
         return Date().timeIntervalSince(lastVerified) < configuration.offlineTolerance
     }
+
+    // MARK: Scene resolution
+
+    #if canImport(UIKit) && !os(watchOS)
+    /// The scene a purchase sheet should be confirmed in: the foreground-active
+    /// one, falling back to any connected scene.
+    @MainActor
+    private static func activeWindowScene() -> UIWindowScene? {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        return scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
+    }
+    #endif
 
     // MARK: Verification
 

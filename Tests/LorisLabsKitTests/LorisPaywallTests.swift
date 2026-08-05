@@ -80,6 +80,53 @@ struct LorisTrialServiceTests {
         #expect(trial.hasExpired(now: afterExpiry))
     }
 
+    @Test func legacyUserDefaultsTrialIsAdoptedNotRestarted() throws {
+        let suiteName = "com.lorislab.tests.trial.legacy.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let trial = makeTrial(days: 14)
+        defer { trial.reset() }
+
+        // Someone five days into their trial on the old build.
+        let startedFiveDaysAgo = Date().addingTimeInterval(-5 * 86_400)
+        defaults.set(startedFiveDaysAgo, forKey: "lumen_trial_start_date")
+
+        #expect(trial.migrateLegacyStart(fromUserDefaultsKey: "lumen_trial_start_date", defaults: defaults))
+        // They keep the 9 days they had left — not a fresh 14.
+        #expect(trial.daysRemaining() == 9)
+        #expect(trial.isActive())
+    }
+
+    @Test func migrationNeverOverwritesAnExistingKeychainTrial() throws {
+        let suiteName = "com.lorislab.tests.trial.legacy.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let trial = makeTrial(days: 14)
+        defer { trial.reset() }
+
+        let start = Date()
+        trial.startIfNeeded(now: start)
+        // A stale legacy key must not hand back a longer trial.
+        defaults.set(start.addingTimeInterval(86_400), forKey: "lumen_trial_start_date")
+
+        #expect(!trial.migrateLegacyStart(fromUserDefaultsKey: "lumen_trial_start_date", defaults: defaults))
+        #expect(trial.daysRemaining(now: start) == 14)
+    }
+
+    @Test func migrationIsANoOpWithoutALegacyValue() throws {
+        let suiteName = "com.lorislab.tests.trial.legacy.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let trial = makeTrial(days: 14)
+        defer { trial.reset() }
+
+        #expect(!trial.migrateLegacyStart(fromUserDefaultsKey: "absent", defaults: defaults))
+        #expect(!trial.hasStarted)
+    }
+
     @Test func anUnstartedTrialHasNotExpired() {
         let trial = makeTrial(days: 7)
         defer { trial.reset() }
