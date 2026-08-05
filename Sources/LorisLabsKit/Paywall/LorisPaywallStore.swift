@@ -39,6 +39,10 @@ public final class LorisPaywallStore {
     /// active instead of only whether *something* was bought.
     public private(set) var purchasedProductIDs: Set<String> = []
 
+    /// Highest rank owned, per `PaywallConfiguration.productTierRanks`.
+    /// Zero when the app has no tiers or the user owns nothing.
+    public private(set) var highestTierRank: Int = 0
+
     /// Set when a purchase or restore fails, for the view to display.
     public var lastError: String?
 
@@ -281,6 +285,7 @@ public final class LorisPaywallStore {
 
         subscriptionExpiration = subscriptionExpiry
         purchasedProductIDs = owned
+        highestTierRank = owned.compactMap { configuration.productTierRanks[$0] }.max() ?? 0
 
         if foundPaid {
             cachePaidEntitlement(true)

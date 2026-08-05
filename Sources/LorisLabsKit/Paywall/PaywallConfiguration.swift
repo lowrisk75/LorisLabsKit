@@ -23,6 +23,12 @@ public struct PaywallConfiguration: Sendable {
     /// A single attempt loses the storefront to one dropped packet.
     public let productLoadRetries: Int
 
+    /// Rank of each product when access comes in levels rather than on/off —
+    /// 404's free/pro/aiPlus, Clasp's pro/proPlus. Higher wins.
+    ///
+    /// Leave empty for an app where any purchase unlocks the same thing.
+    public let productTierRanks: [String: Int]
+
     /// Subscription group used for renewal monitoring. When nil, the group of
     /// the first auto-renewable product found is used.
     public let subscriptionGroupID: String?
@@ -49,8 +55,10 @@ public struct PaywallConfiguration: Sendable {
         offlineTolerance: TimeInterval = 24 * 60 * 60,
         expiringSoonThreshold: TimeInterval = 3 * 24 * 60 * 60,
         productLoadRetries: Int = 3,
+        productTierRanks: [String: Int] = [:],
         keychainService: String = Bundle.main.bundleIdentifier ?? "com.lorislab.unknown"
     ) {
+        self.productTierRanks = productTierRanks
         self.productIDs = productIDs
         self.lifetimeProductIDs = lifetimeProductIDs
         self.consumableProductIDs = consumableProductIDs
