@@ -108,12 +108,31 @@ public final class LorisPaywallStore {
 
     // MARK: Trial
 
+    /// True once the trial has ever been started on this device, running or not.
+    public var hasStartedTrial: Bool { trial?.hasStarted ?? false }
+
+    /// True while the trial is running.
+    public var isTrialActive: Bool { trial?.isActive() ?? false }
+
+    /// True only after a trial that was started has run out.
+    public var hasTrialExpired: Bool { trial?.hasExpired() ?? false }
+
+    /// Whole days left in the trial, 0 when it never started or has ended.
+    public var trialDaysRemaining: Int { trial?.daysRemaining() ?? 0 }
+
     /// Grants the trial the first time it is called on this device.
+    ///
+    /// Synchronous on purpose: callers routinely read `entitlement` on the very
+    /// next line, so the trial must be visible immediately rather than after an
+    /// await. The full entitlement refresh still runs in the background.
     @discardableResult
-    public func startTrialIfNeeded() async -> Bool {
+    public func startTrialIfNeeded() -> Bool {
         guard let trial, !trial.hasStarted else { return false }
         let started = trial.startIfNeeded()
-        await refreshEntitlements()
+        if started, !entitlement.isPaid {
+            entitlement = trialState()
+        }
+        Task { await refreshEntitlements() }
         return started
     }
 
@@ -157,12 +176,29 @@ public final class LorisPaywallStore {
         }
     }
 
+    /// True while a restore is in flight, so the button can show progress.
+    ///
+    /// Without it a restore reads as a dead button: Lumen's swallowed every
+    /// failure into a log line and a paying subscriber reported it as "nothing
+    /// happens" (Ghislain, 2026-07-25).
+    public private(set) var isRestoring = false
+
+    /// True when the last restore completed without error but found no
+    /// entitlement for this Apple ID — a distinct outcome from a failure, and
+    /// one a silent restore reports identically to success.
+    public private(set) var restoreFoundNothing = false
+
     public func restorePurchases() async {
         lastError = nil
+        restoreFoundNothing = false
+        isRestoring = true
+        defer { isRestoring = false }
+
         do {
             try await AppStore.sync()
             isStoreReachable = true
             await refreshEntitlements()
+            restoreFoundNothing = purchasedProductIDs.isEmpty
         } catch {
             isStoreReachable = false
             lastError = error.localizedDescription
