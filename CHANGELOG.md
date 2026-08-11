@@ -2,6 +2,57 @@
 
 All notable changes to LorisLabsKit are documented here.
 
+## [0.8.0] — 2026-08-05
+
+### Added — `LorisPaywall`, the StoreKit engine the kit never had
+The kit shipped `LorisLabsPaywallView` (231 lines of UI) with **no engine**, so
+~14 apps each wrote their own StoreKit manager with product identifiers compiled
+in. Seeded per the 2026-07-29 rule — from the richest implementations (Clasp's
+offline tolerance, Lumen's trial), not the most elegant.
+
+- `PaywallConfiguration` — product identifiers injected, plus lifetime,
+  consumable and tier declarations. The hardcoding is what caused the forks.
+- `EntitlementState` — `none` / `trial` / `subscribed` / `lifetime`, with
+  `isPro` (unlock features) distinct from `isPaid` (stop nudging).
+- `LorisTrialService` — trial in the **keychain**, not `UserDefaults`, where
+  deleting the app's data handed out a fresh trial. `migrateLegacyStart`
+  adopts an existing `UserDefaults` trial so nobody restarts or loses days.
+- `LorisPaywallStore` — `@Observable` engine: purchase, restore, transaction
+  listener, offline tolerance, offer codes.
+
+### Added — four capabilities no app in the portfolio had
+Each was found while migrating a real app, not designed up front.
+
+- **`RenewalStatus`** from `subscriptionGroupStatus` + `renewalInfo`. Nothing
+  read these: a subscription in billing retry looked exactly like a healthy one
+  until it vanished.
+- **`entitlementsLoaded`** — UI gates must not show a paywall before entitlements
+  are read. Lumen shipped without it and paying subscribers hit the paywall on
+  every cold launch (reported 2026-05-22).
+- **`isRestoring` / `restoreFoundNothing`** — a restore that failed was logged and
+  nothing else, so the button read as dead (reported by a paying subscriber,
+  2026-07-25). "Sync worked but this Apple ID owns nothing" is now distinct from
+  a failure.
+- **Consumables** — tips never reach `Transaction.currentEntitlements`, so an
+  entitlement-only engine completes the purchase and never thanks the buyer.
+  `onConsumablePurchase` fires from both the purchase call and the listener.
+
+### Added — platform and robustness
+- `purchase(confirmIn:)` on tvOS/visionOS, which reject the plain call. Without
+  it LumenTV purchases would have broken outright.
+- `loadProducts` retries with exponential backoff. One dropped packet used to
+  leave an empty paywall and no way to pay.
+- `productTierRanks` — access in levels (404's free/pro/aiPlus, Clasp's
+  pro/proPlus) instead of a boolean.
+
+### Adopted by
+Lumen (iOS ✅ build), TypeMetrics (macOS ✅ build), 404 (committed, unverified).
+
+### Known gaps
+- The package still does not compile for **watchOS**: `Review/` guards tvOS but
+  not watchOS (`d728fb2`), untouched by this work.
+- 55 tests pass; builds verified on macOS, tvOS and visionOS.
+
 ## [0.7.0] — 2026-07-29
 
 ### Changed — `SyncRecord` carries typed fields, not one opaque blob
