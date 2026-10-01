@@ -25,7 +25,7 @@ let package = Package(
         .library(name: "LorisDesignCore", targets: ["LorisDesignCore"]),
     ],
     targets: [
-        .target(name: "LorisLabsKit"),
+        .target(name: "LorisLabsKit", resources: [.process("Resources")]),
         .target(name: "LorisSync"),
         .target(
             name: "LorisReports",

@@ -5,21 +5,13 @@ import SwiftUI
 import UIKit
 #endif
 
-/// Smart review prompt manager that tracks launches, success moments, and errors,
-/// then prompts via `SKStoreReviewController` / `RequestReviewAction` only when
-/// the user is in a positive emotional state and Apple's per-year cap is not yet hit.
+/// Tracks meaningful use and attempts the native StoreKit review prompt at an idle moment.
+/// Payment status, satisfaction and past errors never select users for reviews.
+/// StoreKit decides whether to show the prompt; no callback proves display or a submitted review.
 ///
-/// Apple-enforced rules (you don't have to handle, the system does):
-/// - Max 3 prompts per user per 365 days
-/// - Prompts shown only on devices with App Store access
-/// - User dismissal counts as a presentation
-///
-/// Best practices this manager enforces (you DO need to track these):
-/// - Don't prompt before N launches AND N success moments
-/// - Don't prompt within X days of an error
-/// - Don't prompt within Y days of the last prompt (this manager's cooldown, on top of Apple's cap)
-/// - Don't prompt while the user is in a free trial (their judgment is biased by price)
-/// - Don't prompt before Z days since install
+/// Default experiment: fourteen days of use, five completions on three distinct days,
+/// one attempt per session/version and a 120-day cooldown. These thresholds are tunable,
+/// not a measured guarantee of review conversion. Help remains independently accessible.
 ///
 /// Usage:
 /// ```swift
@@ -53,16 +45,20 @@ public final class SmartReviewPromptManager {
         public var minimumSuccessMoments: Int
         public var minimumDaysSinceInstall: Int
         public var cooldownDays: Int
+        /// Legacy compatibility setting; does not affect eligibility.
         public var errorBlackoutDays: Int
+        public var minimumActiveDays: Int
+        /// Legacy compatibility setting; does not affect eligibility.
         public var requireNonTrialUser: Bool
 
         public init(
-            minimumLaunches: Int = 5,
-            minimumSuccessMoments: Int = 3,
-            minimumDaysSinceInstall: Int = 7,
-            cooldownDays: Int = 60,
-            errorBlackoutDays: Int = 7,
-            requireNonTrialUser: Bool = true
+            minimumLaunches: Int = 0,
+            minimumSuccessMoments: Int = 5,
+            minimumDaysSinceInstall: Int = 14,
+            cooldownDays: Int = 120,
+            errorBlackoutDays: Int = 0,
+            requireNonTrialUser: Bool = false,
+            minimumActiveDays: Int = 3
         ) {
             self.minimumLaunches = minimumLaunches
             self.minimumSuccessMoments = minimumSuccessMoments
@@ -70,11 +66,11 @@ public final class SmartReviewPromptManager {
             self.cooldownDays = cooldownDays
             self.errorBlackoutDays = errorBlackoutDays
             self.requireNonTrialUser = requireNonTrialUser
+            self.minimumActiveDays = minimumActiveDays
         }
     }
 
-    /// Trial / paid state. The manager refuses to prompt during an active trial because
-    /// the user's judgment is biased by the price they haven't yet paid.
+    /// Compatibility signal only. Payment state never determines review eligibility.
     public enum TrialState: Sendable {
         case free
         case trialActive
@@ -84,19 +80,25 @@ public final class SmartReviewPromptManager {
     // MARK: - Storage keys
 
     private enum Key {
+        static let activeDays = "lorislabskit.review.activeDays"
         static let installDate = "lorislabskit.review.installDate"
         static let totalLaunches = "lorislabskit.review.totalLaunches"
         static let totalSuccessMoments = "lorislabskit.review.totalSuccessMoments"
         static let lastErrorDate = "lorislabskit.review.lastErrorDate"
-        static let lastPromptDate = "lorislabskit.review.lastPromptDate"
-        static let promptedForVersion = "lorislabskit.review.promptedForVersion"
+        // Keep the persisted values stable while naming the semantics honestly:
+        // StoreKit does not reveal whether the prompt was displayed.
+        static let lastAttemptDate = "lorislabskit.review.lastPromptDate"
+        static let attemptedForVersion = "lorislabskit.review.promptedForVersion"
     }
 
     // MARK: - Stored state
 
     private let userDefaults: UserDefaults
     private let appVersion: String
+    private let now: @MainActor @Sendable () -> Date
     public let configuration: Configuration
+    public var interactionInProgress = false
+    private var attemptedThisSession = false
     public private(set) var trialState: TrialState = .free
 
     // MARK: - Init
@@ -105,13 +107,16 @@ public final class SmartReviewPromptManager {
         configuration: Configuration = Configuration(),
         userDefaults: UserDefaults = .standard,
         appVersion: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0",
-        bundleIdentifier: String
+        bundleIdentifier: String,
+        now: @escaping @MainActor @Sendable () -> Date = { Date() }
     ) {
+        precondition(!bundleIdentifier.isEmpty, "bundleIdentifier must not be empty")
         self.configuration = configuration
         self.userDefaults = userDefaults
         self.appVersion = appVersion
+        self.now = now
         if userDefaults.object(forKey: Key.installDate) == nil {
-            userDefaults.set(Date(), forKey: Key.installDate)
+            userDefaults.set(now(), forKey: Key.installDate)
         }
     }
 
@@ -125,10 +130,13 @@ public final class SmartReviewPromptManager {
     public func recordSuccessMoment() {
         let n = userDefaults.integer(forKey: Key.totalSuccessMoments) + 1
         userDefaults.set(n, forKey: Key.totalSuccessMoments)
+        var days = Set(userDefaults.stringArray(forKey: Key.activeDays) ?? [])
+        days.insert(String(Int(now().timeIntervalSince1970 / 86_400)))
+        userDefaults.set(Array(days.sorted().suffix(max(3, configuration.minimumActiveDays))), forKey: Key.activeDays)
     }
 
     public func recordError() {
-        userDefaults.set(Date(), forKey: Key.lastErrorDate)
+        userDefaults.set(now(), forKey: Key.lastErrorDate)
     }
 
     public func recordTrialState(_ state: TrialState) {
@@ -141,11 +149,14 @@ public final class SmartReviewPromptManager {
     /// - At least `minimumLaunches` launches recorded
     /// - At least `minimumSuccessMoments` success moments recorded
     /// - At least `minimumDaysSinceInstall` days since first install
-    /// - No error in the last `errorBlackoutDays` days
+    /// - No interaction currently in progress
     /// - No prompt in the last `cooldownDays` days
-    /// - Not already prompted this app version
-    /// - User is not currently on free trial (if `requireNonTrialUser`)
+    /// - No previous attempt for this app version
+    /// Payment status and past errors do not affect eligibility.
     public var shouldPromptNow: Bool {
+        let currentDate = now()
+        guard !interactionInProgress, !attemptedThisSession else { return false }
+        guard (userDefaults.stringArray(forKey: Key.activeDays) ?? []).count >= configuration.minimumActiveDays else { return false }
         let launches = userDefaults.integer(forKey: Key.totalLaunches)
         guard launches >= configuration.minimumLaunches else { return false }
 
@@ -153,27 +164,19 @@ public final class SmartReviewPromptManager {
         guard successes >= configuration.minimumSuccessMoments else { return false }
 
         if let installDate = userDefaults.object(forKey: Key.installDate) as? Date {
-            let days = Calendar.current.dateComponents([.day], from: installDate, to: Date()).day ?? 0
+            let days = Calendar.current.dateComponents([.day], from: installDate, to: currentDate).day ?? 0
             guard days >= configuration.minimumDaysSinceInstall else { return false }
         }
 
-        if let lastError = userDefaults.object(forKey: Key.lastErrorDate) as? Date {
-            let days = Calendar.current.dateComponents([.day], from: lastError, to: Date()).day ?? 0
-            if days < configuration.errorBlackoutDays { return false }
-        }
-
-        if let lastPrompt = userDefaults.object(forKey: Key.lastPromptDate) as? Date {
-            let days = Calendar.current.dateComponents([.day], from: lastPrompt, to: Date()).day ?? 0
+        if let lastAttempt = userDefaults.object(forKey: Key.lastAttemptDate) as? Date {
+            let days = Calendar.current.dateComponents([.day], from: lastAttempt, to: currentDate).day ?? 0
             if days < configuration.cooldownDays { return false }
         }
 
-        if let lastVersion = userDefaults.string(forKey: Key.promptedForVersion), lastVersion == appVersion {
+        if let lastVersion = userDefaults.string(forKey: Key.attemptedForVersion), lastVersion == appVersion {
             return false
         }
 
-        if configuration.requireNonTrialUser, trialState == .trialActive {
-            return false
-        }
 
         return true
     }
@@ -182,13 +185,13 @@ public final class SmartReviewPromptManager {
 
     // RequestReviewAction / SKStoreReviewController are unavailable on tvOS
     // (no App Store review prompts on Apple TV), so both entry points are gated.
-    #if !os(tvOS)
+    #if !os(tvOS) && !os(watchOS)
     /// Asks SwiftUI's `RequestReviewAction` to show the prompt — but only if criteria are met.
-    /// Records the prompt so future calls obey the cooldown.
+    /// Records the attempt so future calls obey the cooldown. StoreKit may show nothing.
     public func requestIfAppropriate(via action: RequestReviewAction) {
         guard shouldPromptNow else { return }
         action()
-        recordPromptShown()
+        recordPromptAttempted()
     }
     #endif
 
@@ -197,13 +200,14 @@ public final class SmartReviewPromptManager {
     public func requestIfAppropriate(in scene: UIWindowScene) {
         guard shouldPromptNow else { return }
         SKStoreReviewController.requestReview(in: scene)
-        recordPromptShown()
+        recordPromptAttempted()
     }
     #endif
 
-    private func recordPromptShown() {
-        userDefaults.set(Date(), forKey: Key.lastPromptDate)
-        userDefaults.set(appVersion, forKey: Key.promptedForVersion)
+    private func recordPromptAttempted() {
+        attemptedThisSession = true
+        userDefaults.set(now(), forKey: Key.lastAttemptDate)
+        userDefaults.set(appVersion, forKey: Key.attemptedForVersion)
     }
 
     // MARK: - Debug / testing helpers
@@ -213,16 +217,16 @@ public final class SmartReviewPromptManager {
         let successes = userDefaults.integer(forKey: Key.totalSuccessMoments)
         let installDate = userDefaults.object(forKey: Key.installDate) as? Date
         let lastError = userDefaults.object(forKey: Key.lastErrorDate) as? Date
-        let lastPrompt = userDefaults.object(forKey: Key.lastPromptDate) as? Date
-        let promptedVersion = userDefaults.string(forKey: Key.promptedForVersion) ?? "—"
+        let lastAttempt = userDefaults.object(forKey: Key.lastAttemptDate) as? Date
+        let attemptedVersion = userDefaults.string(forKey: Key.attemptedForVersion) ?? "—"
         return """
         SmartReviewPromptManager(
           launches: \(launches) / \(configuration.minimumLaunches),
           successes: \(successes) / \(configuration.minimumSuccessMoments),
           installDate: \(installDate.map(String.init(describing:)) ?? "nil"),
           lastError: \(lastError.map(String.init(describing:)) ?? "nil"),
-          lastPrompt: \(lastPrompt.map(String.init(describing:)) ?? "nil"),
-          promptedForVersion: \(promptedVersion),
+          lastAttempt: \(lastAttempt.map(String.init(describing:)) ?? "nil"),
+          attemptedForVersion: \(attemptedVersion),
           currentVersion: \(appVersion),
           trialState: \(trialState),
           shouldPromptNow: \(shouldPromptNow)
@@ -232,12 +236,13 @@ public final class SmartReviewPromptManager {
 
     /// FOR TESTS ONLY. Wipes all stored signals.
     public func resetAllState() {
+        attemptedThisSession = false
         for key in [
-            Key.installDate, Key.totalLaunches, Key.totalSuccessMoments,
-            Key.lastErrorDate, Key.lastPromptDate, Key.promptedForVersion
+            Key.installDate, Key.activeDays, Key.totalLaunches, Key.totalSuccessMoments,
+            Key.lastErrorDate, Key.lastAttemptDate, Key.attemptedForVersion
         ] {
             userDefaults.removeObject(forKey: key)
         }
-        userDefaults.set(Date(), forKey: Key.installDate)
+        userDefaults.set(now(), forKey: Key.installDate)
     }
 }

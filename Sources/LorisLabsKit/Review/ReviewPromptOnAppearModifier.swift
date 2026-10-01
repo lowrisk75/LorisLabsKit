@@ -1,4 +1,5 @@
 import SwiftUI
+import StoreKit
 
 /// Convenience modifier that asks `SmartReviewPromptManager` to prompt if criteria are met,
 /// when the modified view appears. Intended to be attached to "moment of success" views.
@@ -11,7 +12,7 @@ import SwiftUI
 public struct ReviewPromptOnAppearModifier: ViewModifier {
     private let manager: SmartReviewPromptManager
     // `requestReview` (RequestReviewAction) is unavailable on tvOS.
-    #if !os(tvOS)
+    #if !os(tvOS) && !os(watchOS)
     @Environment(\.requestReview) private var requestReview
     #endif
 
@@ -20,12 +21,13 @@ public struct ReviewPromptOnAppearModifier: ViewModifier {
     }
 
     public func body(content: Content) -> some View {
-        #if os(tvOS)
+        #if os(tvOS) || os(watchOS)
         content // No App Store review prompt on tvOS — no-op.
         #else
         content.task {
             // 0.5s delay so the success view actually renders before the prompt appears.
-            try? await Task.sleep(for: .milliseconds(500))
+            do { try await Task.sleep(for: .seconds(2)) } catch { return }
+            guard !Task.isCancelled else { return }
             manager.requestIfAppropriate(via: requestReview)
         }
         #endif
