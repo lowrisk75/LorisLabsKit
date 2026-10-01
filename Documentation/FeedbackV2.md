@@ -1,6 +1,6 @@
 # Feedback v2 — integration contract
 
-Local implementation, 2026-10-01. The public service and app releases have not been deployed by this change.
+SDK release contract, 2026-10-01. The public Help service is live separately; this package release does not deploy it or release any consuming app.
 
 Add the `LorisReports` package product to the main application. Keep one client per app for the process lifetime and inject the same instance into the UI and lifecycle hooks:
 
@@ -38,7 +38,7 @@ A manual “Write a review” link and Help stay independently reachable. Do not
 ## Migration and release gates
 
 - Existing envelope v1 construction stays source-compatible; decoding handles a missing `context_categories` map. New `FeedbackClient` requires v2 with consent-classified bounded context.
-- Velya currently lacks the package dependency. Lumen currently points at a remote SDK revision. Éclair requires XcodeGen changes. Pin an actually published SDK revision (or use a deliberate local development override), update each app's privacy declarations and then build/test the complete app. This SDK change alone does not switch their support flows.
-- Keep existing support accessible until the public HTTPS endpoint, deletion worker and backup restoration gate pass.
-- v2 attachments, verified email notifications, MetricKit ingestion, message-level remote-AI consent, push/unread badges and unattended retry backoff are not implemented here. The UI does not offer email or attachments.
-- No iOS device, VoiceOver, Dynamic Type or app archive validation is implied by macOS package tests.
+- Local pilot branches exist for Velya, Lumen and Éclair, but intentionally point at the reviewed local package candidate. Replace that path with this immutable remote revision, update each app's privacy declarations and then build/test the complete app. This SDK release alone does not switch their production support flows.
+- Keep existing support accessible until each consuming app verifies the live HTTPS endpoint and deletion path under its final signed build.
+- v2 attachments, verified email notifications, MetricKit ingestion, message-level remote-AI consent, push delivery and unattended retry backoff are not implemented here. The UI does not offer email or attachments; unread activity is poll-based.
+- A dedicated signed iPhone harness validates Keychain, complete file protection, offline/retry and uninstall/reinstall persistence. VoiceOver, large Dynamic Type, locked-state live reads, energy measurement, app archives and each real pilot app remain separate release gates.

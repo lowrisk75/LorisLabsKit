@@ -2,6 +2,36 @@
 
 All notable changes to LorisLabsKit are documented here.
 
+## [0.9.0] — 2026-10-01
+
+### Added — secure Feedback v2
+
+- `FeedbackCenter`, consent review, private conversation and operator status UI.
+- Versioned report envelopes with category-level consent and a fail-closed
+  redaction pipeline.
+- HTTPS-only transport that refuses redirects, preserves idempotency and keeps a
+  bounded seven-day outbox after uncertain delivery.
+- Device-only Keychain capabilities, a bounded opt-in diagnostic journal and
+  closed diagnostic adapters for Velya, Lumen and Éclair.
+- Privacy manifests for `LorisReports` and the shared package resources.
+
+### Changed — review prompts
+
+- Review eligibility now uses meaningful completions, distinct active days and a
+  120-day attempt cooldown with an injectable clock.
+- Paid status, satisfaction answers and error history never gate eligibility.
+  Apps must keep Help and a manual review action independently reachable.
+
+### Verification
+
+- 114 package tests executed with three iCloud-Keychain-only referral tests
+  skipped; privacy manifests, `git diff --check` and Gitleaks passed.
+- A dedicated signed iPhone harness passed Keychain accessibility, complete file
+  protection, offline/retry preservation and uninstall/reinstall persistence.
+  The harness and its synthetic marker were removed after qualification.
+- Public Help is live separately at `https://help.lorislab.fr`; publishing this
+  package version does not deploy or mutate that service.
+
 ## [0.8.0] — 2026-08-05
 
 ### Added — `LorisPaywall`, the StoreKit engine the kit never had
