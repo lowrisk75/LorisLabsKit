@@ -1,0 +1,212 @@
+[
+  {
+    "name": "404 Network",
+    "bundleIdentifier": "com.lorislab.app404",
+    "ascAppId": "6760702536",
+    "tagline": "Explore and diagnose your network",
+    "taglineFrench": "Explorez et diagnostiquez votre réseau",
+    "category": "Utilities",
+    "appStoreCountry": "",
+    "nameFrench": "404 Network"
+  },
+  {
+    "name": "Aegis — Secure Vault",
+    "bundleIdentifier": "com.lorislab.aegis",
+    "ascAppId": "6789967529",
+    "tagline": "A vault for your files and passwords",
+    "taglineFrench": "Un coffre pour vos fichiers et mots de passe",
+    "category": "Utilities",
+    "appStoreCountry": "",
+    "nameFrench": "Aegis — Secure Vault"
+  },
+  {
+    "name": "AuroraPulse - Aurora Tracker",
+    "bundleIdentifier": "com.lorislab.aurorapulse",
+    "ascAppId": "6761294590",
+    "tagline": "Track aurora conditions",
+    "taglineFrench": "Suivez les conditions des aurores",
+    "category": "Weather",
+    "appStoreCountry": "",
+    "nameFrench": "AuroraPulse - Aurora Tracker"
+  },
+  {
+    "name": "Clasp - Clipboard Manager",
+    "bundleIdentifier": "com.lorislab.claspapp",
+    "ascAppId": "6759068382",
+    "tagline": "Clipboard across your devices",
+    "taglineFrench": "Votre presse-papiers entre vos appareils",
+    "category": "Utilities",
+    "appStoreCountry": "",
+    "nameFrench": "Clasp"
+  },
+  {
+    "name": "DNS Sinkhole",
+    "bundleIdentifier": "com.lorislab.sinkhole",
+    "ascAppId": "6760730731",
+    "tagline": "DNS filtering for your devices",
+    "taglineFrench": "Filtrage DNS pour vos appareils",
+    "category": "Utilities",
+    "appStoreCountry": "",
+    "nameFrench": "DNS Sinkhole"
+  },
+  {
+    "name": "EntroFold Archive",
+    "bundleIdentifier": "com.lorislab.entrofold-archive",
+    "ascAppId": "6773836908",
+    "tagline": "Create and open archives on Mac",
+    "taglineFrench": "Créez et ouvrez des archives sur Mac",
+    "category": "Utilities",
+    "appStoreCountry": "",
+    "nameFrench": "EntroFold Archive"
+  },
+  {
+    "name": "Filova",
+    "bundleIdentifier": "com.lorislab.filova",
+    "ascAppId": "6793258211",
+    "tagline": "Your media and transfers",
+    "taglineFrench": "Vos médias et vos transferts",
+    "category": "Music",
+    "appStoreCountry": "",
+    "nameFrench": "Filova"
+  },
+  {
+    "name": "Halte : bloqueur d'appels",
+    "bundleIdentifier": "com.lorislab.halte",
+    "ascAppId": "6775280371",
+    "tagline": "Identify and block unwanted calls",
+    "taglineFrench": "Identifiez et bloquez les appels indésirables",
+    "category": "Utilities",
+    "appStoreCountry": "",
+    "nameFrench": "Halte : bloqueur d'appels"
+  },
+  {
+    "name": "Kalou : Carnet santé animal",
+    "bundleIdentifier": "com.lorislab.kalou",
+    "ascAppId": "6790085975",
+    "tagline": "Keep track of your pet’s health",
+    "taglineFrench": "Suivez la santé de votre animal",
+    "category": "Lifestyle",
+    "appStoreCountry": "",
+    "nameFrench": "Kalou : Carnet santé animal"
+  },
+  {
+    "name": "Kernel — File Sanitizer",
+    "bundleIdentifier": "com.lorislab.kernel",
+    "ascAppId": "6795820987",
+    "tagline": "Clean copies of your files",
+    "taglineFrench": "Nettoyez des copies de vos fichiers",
+    "category": "Utilities",
+    "appStoreCountry": "",
+    "nameFrench": "Kernel — File Sanitizer"
+  },
+  {
+    "name": "Lumen for Frigate",
+    "bundleIdentifier": "com.lorislab.lumenforfrigate.Lumen-for-Frigate",
+    "ascAppId": "6760238729",
+    "tagline": "Your Frigate cameras and events",
+    "taglineFrench": "Vos caméras et événements Frigate",
+    "category": "Utilities",
+    "appStoreCountry": "",
+    "nameFrench": "Lumen for Frigate"
+  },
+  {
+    "name": "LumenTV",
+    "bundleIdentifier": "com.lorislab.lumenforfrigate.tv.LumenTV",
+    "ascAppId": "6760317319",
+    "tagline": "Frigate cameras on Apple TV",
+    "taglineFrench": "Vos caméras Frigate sur Apple TV",
+    "category": "Utilities",
+    "appStoreCountry": "",
+    "nameFrench": "LumenTV"
+  },
+  {
+    "name": "Meetglow",
+    "bundleIdentifier": "com.kevinnadjarian.kiosk",
+    "ascAppId": "6821354551",
+    "tagline": "Your meetings at a glance",
+    "taglineFrench": "Vos réunions en un coup d’œil",
+    "category": "Business",
+    "appStoreCountry": "",
+    "nameFrench": "Meetglow"
+  },
+  {
+    "name": "Mela AAC",
+    "bundleIdentifier": "com.lorislab.mela",
+    "ascAppId": "6786621361",
+    "tagline": "Accessible communication with symbols",
+    "taglineFrench": "Communication accessible par pictogrammes",
+    "category": "Education",
+    "appStoreCountry": "",
+    "nameFrench": "Mela AAC"
+  },
+  {
+    "name": "Millrace",
+    "bundleIdentifier": "com.lorislab.Millrace",
+    "ascAppId": "6784692429",
+    "tagline": "Organize your documents on Mac",
+    "taglineFrench": "Organisez vos documents sur Mac",
+    "category": "Business",
+    "appStoreCountry": "",
+    "nameFrench": "Millrace"
+  },
+  {
+    "name": "Millrace Scan",
+    "bundleIdentifier": "com.lorislab.MillraceScan",
+    "ascAppId": "6793437300",
+    "tagline": "Scan and organize your documents",
+    "taglineFrench": "Numérisez et organisez vos documents",
+    "category": "Productivity",
+    "appStoreCountry": "",
+    "nameFrench": "Millrace Scan"
+  },
+  {
+    "name": "Rampart for OPNsense",
+    "bundleIdentifier": "com.lorislab.rampart",
+    "ascAppId": "6784847934",
+    "tagline": "Manage your OPNsense firewall",
+    "taglineFrench": "Gérez votre pare-feu OPNsense",
+    "category": "Utilities",
+    "appStoreCountry": "",
+    "nameFrench": "Rampart for OPNsense"
+  },
+  {
+    "name": "SiliconPass: Password Manager",
+    "bundleIdentifier": "com.lorislab.siliconpass",
+    "ascAppId": "6808961058",
+    "tagline": "Manage your passwords",
+    "taglineFrench": "Gérez vos mots de passe",
+    "category": "Productivity",
+    "appStoreCountry": "",
+    "nameFrench": "SiliconPass: Password Manager"
+  },
+  {
+    "name": "Sève: nutrition & metabolism",
+    "bundleIdentifier": "com.lorislab.prism",
+    "ascAppId": "6793450821",
+    "tagline": "Understand food and nutrition",
+    "taglineFrench": "Comprenez votre alimentation",
+    "category": "Health & Fitness",
+    "appStoreCountry": "",
+    "nameFrench": "Sève : nutrition & métabolisme"
+  },
+  {
+    "name": "TypeMetrics",
+    "bundleIdentifier": "com.LorisLabs.typemetrics",
+    "ascAppId": "6758631803",
+    "tagline": "Typing practice and statistics",
+    "taglineFrench": "Entraînement et statistiques de frappe",
+    "category": "Productivity",
+    "appStoreCountry": "",
+    "nameFrench": "TypeMetrics"
+  },
+  {
+    "name": "Velya",
+    "bundleIdentifier": "com.lorislab.velya",
+    "ascAppId": "6774200791",
+    "tagline": "Plan your wake-ups",
+    "taglineFrench": "Organisez vos réveils",
+    "category": "Productivity",
+    "appStoreCountry": "",
+    "nameFrench": "Velya"
+  }
+]

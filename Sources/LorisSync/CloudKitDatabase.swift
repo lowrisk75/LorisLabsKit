@@ -18,11 +18,14 @@ import Foundation
 public struct CloudKitDatabase: CloudDatabase {
     private let container: CKContainer
     private let zoneID: CKRecordZone.ID
+    private let physicalDeletionPolicy: CloudSyncPhysicalDeletionPolicy
     private static let modifiedKey = "modifiedAt"
 
-    public init(containerIdentifier: String, zoneName: String = "MelaProfilesZone") {
+    public init(containerIdentifier: String, zoneName: String = "MelaProfilesZone",
+                physicalDeletionPolicy: CloudSyncPhysicalDeletionPolicy = .disabled) {
         container = CKContainer(identifier: containerIdentifier)
         zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
+        self.physicalDeletionPolicy = physicalDeletionPolicy
     }
 
     private var database: CKDatabase { container.privateCloudDatabase }
@@ -41,34 +44,92 @@ public struct CloudKitDatabase: CloudDatabase {
         }
     }
 
-    private func ensureZone() async {
+    private func ensureZone() async throws {
         let zone = CKRecordZone(zoneID: zoneID)
-        _ = try? await database.modifyRecordZones(saving: [zone], deleting: [])
+        _ = try await SyncWriteAcknowledgements.perform(
+            saving: [zoneID], deleting: [], matchesIdentity: { $0 == $1.zoneID }
+        ) {
+            let result = try await database.modifyRecordZones(saving: [zone], deleting: [])
+            return SyncMutationResult(saves: result.saveResults, deletions: result.deleteResults)
+        }
+    }
+
+    private static func modifyRecords(
+        in database: CKDatabase, saving records: [CKRecord], deleting ids: [CKRecord.ID],
+        savePolicy: CKModifyRecordsOperation.RecordSavePolicy = .ifServerRecordUnchanged
+    ) async throws -> [CKRecord.ID: CKRecord] {
+        try await SyncWriteAcknowledgements.perform(
+            saving: records.map(\.recordID), deleting: ids,
+            matchesIdentity: { $0 == $1.recordID }
+        ) {
+            let result = try await database.modifyRecords(saving: records, deleting: ids,
+                                                         savePolicy: savePolicy)
+            return SyncMutationResult(saves: result.saveResults, deletions: result.deleteResults)
+        }
     }
 
     public func save(_ records: [SyncRecord]) async throws {
-        await ensureZone()
+        try Task.checkCancellation()
+        guard !records.isEmpty else { return }
+        try SyncRecordValidation.validate(records)
         let ckRecords = records.map { r -> CKRecord in
             let record = CKRecord(recordType: r.type, recordID: .init(recordName: r.id, zoneID: zoneID))
             r.apply(to: record, modifiedKey: Self.modifiedKey)
             return record
         }
-        _ = try await database.modifyRecords(saving: ckRecords, deleting: [], savePolicy: .allKeys)
+        try SyncWriteAcknowledgements.validateRequest(saving: ckRecords.map(\.recordID),
+                                                     deleting: [])
+        try await ensureZone()
+        _ = try await Self.modifyRecords(in: database, saving: ckRecords, deleting: [],
+                                         savePolicy: .allKeys)
     }
 
     public func fetchAll(type: String) async throws -> [SyncRecord] {
-        await ensureZone()
-        let query = CKQuery(recordType: type, predicate: NSPredicate(value: true))
-        let (matches, _) = try await database.records(matching: query, inZoneWith: zoneID)
-        return matches.compactMap { _, result in
-            guard case .success(let record) = result else { return nil }
-            return SyncRecord(from: record, type: type, modifiedKey: Self.modifiedKey)
+        try SyncRecordValidation.validateType(type)
+        try await ensureZone()
+        return try await Self.fetchRecords(type: type, in: database, zoneID: zoneID)
+    }
+
+    private static func decodeRecord(_ record: CKRecord, type: String) throws -> SyncRecord {
+        guard record.recordType == type,
+              let mapped = SyncRecord(from: record, type: type, modifiedKey: modifiedKey) else {
+            throw CloudSyncReadError.invalidRecord
         }
+        return mapped
+    }
+
+    private static func fetchRecords(type: String, in database: CKDatabase,
+                                     zoneID: CKRecordZone.ID) async throws -> [SyncRecord] {
+        let query = CKQuery(recordType: type, predicate: NSPredicate(value: true))
+        let collected = try await SyncPageCollector.collect { (cursor: CKQueryOperation.Cursor?) in
+            let page: (matchResults: [(CKRecord.ID, Result<CKRecord, any Error>)],
+                       queryCursor: CKQueryOperation.Cursor?)
+            if let cursor {
+                page = try await database.records(continuingMatchFrom: cursor)
+            } else {
+                page = try await database.records(matching: query, inZoneWith: zoneID)
+            }
+            return SyncResultPage(results: page.matchResults.map { _, result in
+                result.flatMap { record in Result { try decodeRecord(record, type: type) } }
+            }, continuation: page.queryCursor)
+        }
+        return collected.values
     }
 
     public func delete(ids: [String], type: String) async throws {
+        try Task.checkCancellation()
+        guard !ids.isEmpty else { return }
+        try physicalDeletionPolicy.requirePermission() // Before native ID creation or any provider call.
+        try SyncRecordValidation.validateType(type)
+        try ids.forEach { try SyncRecordValidation.validateID($0) }
         let recordIDs = ids.map { CKRecord.ID(recordName: $0, zoneID: zoneID) }
-        _ = try await database.modifyRecords(saving: [], deleting: recordIDs)
+        try await SyncDeletionPreflight.perform(
+            ids: recordIDs, type: type, policy: physicalDeletionPolicy,
+            lookup: { try await database.record(for: $0) },
+            matchesIdentity: { $0 == $1.recordID }, recordType: { $0.recordType },
+            remove: { ids in
+                _ = try await Self.modifyRecords(in: database, saving: [], deleting: ids)
+            })
     }
 }
 
@@ -77,27 +138,33 @@ public struct CloudKitDatabase: CloudDatabase {
 extension CloudKitDatabase: IncrementalCloudDatabase {
 
     /// Silent push on zone change. `shouldSendContentAvailable` keeps it invisible
-    /// to the user; saving an existing subscription id is a no-op server-side, so
-    /// calling this at every launch is safe.
+    /// to the user. Repeated saves use the same identity; only an explicit
+    /// successful result confirms registration (never a generic rejection).
     public func registerChangeSubscription(id: String) async throws {
-        await ensureZone()
+        try SyncRecordValidation.validateID(id)
+        try await ensureZone()
         let subscription = CKRecordZoneSubscription(zoneID: zoneID, subscriptionID: id)
         let info = CKSubscription.NotificationInfo()
         info.shouldSendContentAvailable = true
         subscription.notificationInfo = info
-        do {
-            _ = try await database.modifySubscriptions(saving: [subscription], deleting: [])
-        } catch let error as CKError where error.code == .serverRejectedRequest {
-            // Already registered — CloudKit rejects the duplicate rather than
-            // treating it as an update.
-            return
+        _ = try await SyncWriteAcknowledgements.perform(
+            saving: [id], deleting: [], matchesIdentity: { $0 == $1.subscriptionID }
+        ) {
+            let result = try await database.modifySubscriptions(saving: [subscription], deleting: [])
+            return SyncMutationResult(saves: result.saveResults, deletions: result.deleteResults)
         }
     }
 
     public func fetchChanges(type: String, since token: Data?) async throws -> ZoneChanges {
-        await ensureZone()
+        try Task.checkCancellation()
+        try SyncRecordValidation.validateType(type)
+        // Present but corrupt bytes are not an implicit first fetch. Decode before
+        // zone setup; no recovery/reset is authorized by a local archive failure.
+        let checkpoint = try Self.decode(token)
+        try Task.checkCancellation()
+        try await ensureZone()
         do {
-            return try await fetchDelta(type: type, since: Self.decode(token), wasReset: false)
+            return try await fetchDelta(type: type, since: checkpoint, wasReset: false)
         } catch let error as CKError where error.code == .changeTokenExpired {
             // The server no longer knows our token (too old, or the zone was
             // re-created). Anything less than a full refetch silently loses
@@ -109,24 +176,25 @@ extension CloudKitDatabase: IncrementalCloudDatabase {
     private func fetchDelta(type: String,
                             since token: CKServerChangeToken?,
                             wasReset: Bool) async throws -> ZoneChanges {
-        let result = try await database.recordZoneChanges(inZoneWith: zoneID, since: token)
-
-        let modifications = result.modificationResultsByID.values.compactMap { r -> CKRecord? in
-            guard case .success(let modification) = r else { return nil }
-            return modification.record
+        let collected = try await SyncPageCollector.collect(startingAt: token) { cursor in
+            let result = try await database.recordZoneChanges(inZoneWith: zoneID, since: cursor)
+            // Check every Result before filtering types. An error has no trustworthy
+            // recordType and must not allow the zone-wide token to advance.
+            let modifications = try result.modificationResultsByID.values.map { try $0.get().record }
+            let changed = try modifications.filter { $0.recordType == type }.map {
+                try Self.decodeRecord($0, type: type)
+            }
+            let deletions = result.deletions.filter { $0.recordType == type }.map(\.recordID.recordName)
+            return SyncResultPage(
+                results: [.success(ZoneChanges(changed: changed, deletedIDs: deletions))],
+                continuation: result.moreComing ? result.changeToken : nil,
+                checkpoint: result.changeToken)
         }
-        let deletions = result.deletions.map(\.recordID.recordName)
-        let newToken = result.changeToken
-
-        let changed = modifications.compactMap { record -> SyncRecord? in
-            guard record.recordType == type else { return nil }
-            return SyncRecord(from: record, type: type, modifiedKey: Self.modifiedKey)
+        guard let checkpoint = collected.checkpoint,
+              let encoded = Self.encode(checkpoint) else {
+            throw CloudSyncReadError.invalidCheckpoint
         }
-
-        return ZoneChanges(changed: changed,
-                           deletedIDs: deletions,
-                           token: Self.encode(newToken),
-                           wasReset: wasReset)
+        return try SyncZoneAccumulator.combine(collected.values, token: encoded, wasReset: wasReset)
     }
 
     // Tokens cross the protocol boundary as opaque `Data` so nothing above this
@@ -137,10 +205,19 @@ extension CloudKitDatabase: IncrementalCloudDatabase {
                                                  requiringSecureCoding: true)
     }
 
-    private static func decode(_ data: Data?) -> CKServerChangeToken? {
+    // Internal seam: no container/account/network required for archive regressions.
+    static func decode(_ data: Data?) throws -> CKServerChangeToken? {
         guard let data else { return nil }
-        return try? NSKeyedUnarchiver.unarchivedObject(ofClass: CKServerChangeToken.self,
-                                                       from: data)
+        do {
+            guard let checkpoint = try NSKeyedUnarchiver.unarchivedObject(
+                ofClass: CKServerChangeToken.self, from: data
+            ) else { throw CloudSyncReadError.invalidCheckpoint }
+            return checkpoint
+        } catch {
+            // Preserve original bytes in the host; do not expose archive contents
+            // through diagnostics or treat decode failure as provider expiry.
+            throw CloudSyncReadError.invalidCheckpoint
+        }
     }
 }
 
@@ -150,54 +227,109 @@ extension CloudKitDatabase: SharedCloudDatabase {
 
     private var sharedDatabase: CKDatabase { container.sharedCloudDatabase }
 
+    static func isMissingRecord(_ error: any Error) -> Bool {
+        (error as? CKError)?.code == .unknownItem
+    }
+
+    private static func lookupRecord(_ id: CKRecord.ID, in database: CKDatabase) async throws -> CKRecord? {
+        let record = try await SyncShareResolution.optional(
+            isMissing: { isMissingRecord($0) }
+        ) { try await database.record(for: id) }
+        if let record, record.recordID != id {
+            throw CloudSyncSharingError.inconsistentMetadata
+        }
+        return record
+    }
+
+    private static func lookupRoot(_ id: CKRecord.ID, type: String,
+                                   in database: CKDatabase) async throws -> CKRecord? {
+        guard let root = try await lookupRecord(id, in: database) else { return nil }
+        guard root.recordType == type else { throw CloudSyncSharingError.recordTypeMismatch }
+        return root
+    }
+
+    private static func readShare(for root: CKRecord, in database: CKDatabase) async throws -> CKShare? {
+        guard let reference = root.share else { return nil }
+        guard reference.recordID.zoneID == root.recordID.zoneID,
+              let record = try await lookupRecord(reference.recordID, in: database),
+              let share = record as? CKShare, share.url != nil else {
+            throw CloudSyncSharingError.inconsistentMetadata
+        }
+        return share
+    }
+
+    private static func participantRole(in share: CKShare) -> SyncShareRole {
+        guard let participant = share.currentUserParticipant else { return .unknown }
+        switch participant.role {
+        case .owner: return .owner
+        case .privateUser, .publicUser: return .participant
+        default: return .unknown // New roles require an explicit compatibility decision.
+        }
+    }
+
     public func share(recordID: String,
                       type: String,
                       title: String?,
                       permission: SharePermission = .readWrite) async throws -> ShareInfo {
-        // CloudKit refuses a second share on the same record, so reuse silently
-        // rather than making every caller check first.
-        if let existing = try await existingShare(recordID: recordID, type: type) {
-            return existing
-        }
-
+        try SyncRecordValidation.validateID(recordID)
+        try SyncRecordValidation.validateType(type)
         let rootID = CKRecord.ID(recordName: recordID, zoneID: zoneID)
-        guard let root = try? await database.record(for: rootID) else {
+        guard let root = try await Self.lookupRoot(rootID, type: type, in: database) else {
             throw ShareError.recordNotFound
+        }
+        if let existing = try await Self.readShare(for: root, in: database) {
+            try Self.requirePermission(existing.publicPermission, requested: permission)
+            guard let url = existing.url else { throw ShareError.invalidShare }
+            return ShareInfo(url: url, recordID: recordID,
+                             isOwner: try SyncShareResolution.isOwner(role: Self.participantRole(in: existing)),
+                             participantCount: existing.participants.count)
         }
 
         let share = CKShare(rootRecord: root)
         share[CKShare.SystemFieldKey.title] = title as CKRecordValue?
         share.publicPermission = permission == .readWrite ? .readWrite : .readOnly
 
-        _ = try await database.modifyRecords(saving: [root, share], deleting: [])
-
-        guard let url = share.url else { throw ShareError.invalidShare }
+        let confirmed = try await Self.modifyRecords(in: database, saving: [root, share], deleting: [])
+        guard let savedShare = confirmed[share.recordID] as? CKShare,
+              let url = savedShare.url else { throw ShareError.invalidShare }
+        try Self.requirePermission(savedShare.publicPermission, requested: permission)
+        guard try SyncShareResolution.isOwner(role: Self.participantRole(in: savedShare)) else {
+            throw ShareError.notOwner
+        }
         return ShareInfo(url: url,
                          recordID: recordID,
                          isOwner: true,
-                         participantCount: share.participants.count)
+                         participantCount: savedShare.participants.count)
+    }
+
+    private static func requirePermission(_ permission: CKShare.ParticipantPermission,
+                                          requested: SharePermission) throws {
+        let effective: SharePermission?
+        switch permission {
+        case .readOnly: effective = .readOnly
+        case .readWrite: effective = .readWrite
+        default: effective = nil // none/unknown cannot satisfy a requested public grant.
+        }
+        try SyncShareResolution.requirePermission(effective, requested: requested)
     }
 
     public func existingShare(recordID: String, type: String) async throws -> ShareInfo? {
+        try SyncRecordValidation.validateID(recordID)
+        try SyncRecordValidation.validateType(type)
         let rootID = CKRecord.ID(recordName: recordID, zoneID: zoneID)
-        guard let root = try? await database.record(for: rootID),
-              let shareRef = root.share else { return nil }
-        guard let share = try? await database.record(for: shareRef.recordID) as? CKShare,
-              let url = share.url else { return nil }
-
+        guard let root = try await Self.lookupRoot(rootID, type: type, in: database),
+              let share = try await Self.readShare(for: root, in: database) else { return nil }
+        guard let url = share.url else { throw CloudSyncSharingError.inconsistentMetadata }
         return ShareInfo(url: url,
                          recordID: recordID,
-                         isOwner: share.owner.userIdentity.userRecordID == share.currentUserParticipant?.userIdentity.userRecordID,
+                         isOwner: try SyncShareResolution.isOwner(role: Self.participantRole(in: share)),
                          participantCount: share.participants.count)
     }
 
     public func acceptShare(at url: URL) async throws {
-        let metadata: CKShare.Metadata
-        do {
-            metadata = try await container.shareMetadata(for: url)
-        } catch {
-            throw ShareError.invalidShare
-        }
+        try Task.checkCancellation()
+        let metadata = try await container.shareMetadata(for: url)
+        try Task.checkCancellation()
         try await accept(metadata: metadata)
     }
 
@@ -205,56 +337,56 @@ extension CloudKitDatabase: SharedCloudDatabase {
     /// This is the path iOS and macOS actually use when the user taps a share link;
     /// `acceptShare(at:)` exists for links the app resolves itself.
     public func accept(metadata: CKShare.Metadata) async throws {
-        // Already a participant: CloudKit reports .alreadyShared, which is a
-        // success from the user's point of view.
-        do {
-            _ = try await container.accept([metadata])
-        } catch let error as CKError where error.code == .alreadyShared {
-            return
+        try Task.checkCancellation()
+        // The provided metadata explicitly says no acceptance is needed.
+        // alreadyShared describes sharing conflicts, not acceptance success.
+        guard metadata.participantStatus != .accepted else { return }
+        _ = try await SyncWriteAcknowledgements.perform(
+            saving: [metadata], deleting: [],
+            matchesIdentity: { $0.share.recordID == $1.recordID }
+        ) {
+            let result = try await container.accept([metadata])
+            return SyncMutationResult(saves: result, deletions: [:])
         }
     }
 
     public func fetchShared(type: String) async throws -> [SyncRecord] {
+        try SyncRecordValidation.validateType(type)
         // Shared records live in their owners' zones, so enumerate zones first —
         // there is no single zone to query.
         let zones = try await sharedDatabase.allRecordZones()
         var out: [SyncRecord] = []
 
         for zone in zones {
-            let query = CKQuery(recordType: type, predicate: NSPredicate(value: true))
-            guard let (matches, _) = try? await sharedDatabase.records(matching: query,
-                                                                       inZoneWith: zone.zoneID)
-            else { continue }
-            for (_, result) in matches {
-                guard case .success(let record) = result,
-                      let mapped = SyncRecord(from: record, type: type, modifiedKey: Self.modifiedKey)
-                else { continue }
-                out.append(mapped)
-            }
+            let records = try await Self.fetchRecords(type: type, in: sharedDatabase, zoneID: zone.zoneID)
+            out.append(contentsOf: records)
         }
+        // This API cannot represent zone/owner-qualified IDs. Do not conflate them.
+        try SyncShareResolution.ensureUniqueIDs(out.map(\.id))
         return out.sorted { $0.id < $1.id }
     }
 
     public func stopSharing(recordID: String, type: String) async throws {
+        try SyncRecordValidation.validateID(recordID)
+        try SyncRecordValidation.validateType(type)
         let rootID = CKRecord.ID(recordName: recordID, zoneID: zoneID)
-
-        // Owner: delete the CKShare, which revokes access for everyone.
-        if let root = try? await database.record(for: rootID), let shareRef = root.share {
-            _ = try await database.modifyRecords(saving: [], deleting: [shareRef.recordID])
-            return
-        }
-
-        // Participant: the record is not in our private database. Leaving means
-        // deleting the share from the *shared* database.
-        let zones = try await sharedDatabase.allRecordZones()
-        for zone in zones {
-            let id = CKRecord.ID(recordName: recordID, zoneID: zone.zoneID)
-            guard let record = try? await sharedDatabase.record(for: id),
-                  let shareRef = record.share else { continue }
-            _ = try await sharedDatabase.modifyRecords(saving: [], deleting: [shareRef.recordID])
-            return
-        }
-        throw ShareError.recordNotFound
+        try await SyncShareResolution.removeUnique(
+            privateRoot: { try await Self.lookupRoot(rootID, type: type, in: database) },
+            sharedZones: { try await sharedDatabase.allRecordZones().map(\.zoneID) },
+            sharedRoot: { zone in
+                try await Self.lookupRoot(CKRecord.ID(recordName: recordID, zoneID: zone),
+                                          type: type, in: sharedDatabase)
+            },
+            remove: { candidate in
+                let target = candidate.scope == .privateDatabase ? database : sharedDatabase
+                guard let share = try await Self.readShare(for: candidate.root, in: target) else {
+                    throw ShareError.recordNotFound
+                }
+                try SyncShareResolution.requireRemovalRole(
+                    scope: candidate.scope, role: Self.participantRole(in: share),
+                    accepted: share.currentUserParticipant?.acceptanceStatus == .accepted)
+                _ = try await Self.modifyRecords(in: target, saving: [], deleting: [share.recordID])
+            })
     }
 }
 #endif

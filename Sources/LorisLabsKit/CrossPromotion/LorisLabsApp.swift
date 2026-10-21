@@ -1,7 +1,7 @@
 import Foundation
 
-/// One LorisLabs app, for the "More from LorisLabs" cross-promotion view.
-public struct LorisLabsApp: Identifiable, Hashable, Sendable {
+/// A published app. The built-in catalogue and official icons are bundled for offline use.
+public struct LorisLabsApp: Identifiable, Hashable, Sendable, Codable {
     public var id: String { bundleIdentifier }
     public let name: String
     public let bundleIdentifier: String
@@ -9,76 +9,61 @@ public struct LorisLabsApp: Identifiable, Hashable, Sendable {
     public let tagline: String
     public let category: String
     public let appStoreCountry: String
+    public let nameFrench: String?
+    public let taglineFrench: String?
 
-    public init(
-        name: String,
-        bundleIdentifier: String,
-        ascAppId: String,
-        tagline: String,
-        category: String,
-        appStoreCountry: String = "us"
-    ) {
-        self.name = name
-        self.bundleIdentifier = bundleIdentifier
-        self.ascAppId = ascAppId
-        self.tagline = tagline
-        self.category = category
-        self.appStoreCountry = appStoreCountry
+    public init(name: String, bundleIdentifier: String, ascAppId: String, tagline: String,
+                category: String, appStoreCountry: String = "", nameFrench: String? = nil,
+                taglineFrench: String? = nil) {
+        precondition(!ascAppId.isEmpty && ascAppId.allSatisfy(\.isNumber), "App Store ID must be numeric")
+        precondition(appStoreCountry.isEmpty || (appStoreCountry.count == 2 && appStoreCountry.allSatisfy(\.isLetter)))
+        self.name = name; self.bundleIdentifier = bundleIdentifier; self.ascAppId = ascAppId
+        self.tagline = tagline; self.category = category; self.appStoreCountry = appStoreCountry
+        self.nameFrench = nameFrench; self.taglineFrench = taglineFrench
     }
 
-    /// Universal App Store URL.
+    /// A country-neutral link lets the App Store resolve the person's storefront.
     public var appStoreURL: URL {
-        URL(string: "https://apps.apple.com/\(appStoreCountry)/app/id\(ascAppId)")!
+        let country = appStoreCountry.isEmpty ? "" : "/\(appStoreCountry)"
+        return URL(string: "https://apps.apple.com\(country)/app/id\(ascAppId)")!
     }
-
-    /// In-app `itms-apps://` URL for in-app navigation (no Safari bounce).
-    public var itmsURL: URL {
-        URL(string: "itms-apps://apps.apple.com/app/id\(ascAppId)")!
+    public var itmsURL: URL { URL(string: "itms-apps://apps.apple.com/app/id\(ascAppId)")! }
+    public var iconURL: URL? { Bundle.module.url(forResource: "app-\(ascAppId)", withExtension: "jpg") ?? Bundle.module.url(forResource: "app-\(ascAppId)", withExtension: "png") }
+    public var bundledIconURL: URL? { iconURL }
+    public func localizedName(locale: Locale = .current) -> String {
+        locale.language.languageCode?.identifier == "fr" ? (nameFrench ?? Self.portfolio.first { $0.ascAppId == ascAppId }?.nameFrench ?? name) : name
+    }
+    public func localizedTagline(locale: Locale = .current) -> String {
+        locale.language.languageCode?.identifier == "fr" ? (taglineFrench ?? Self.portfolio.first { $0.ascAppId == ascAppId }?.taglineFrench ?? tagline) : tagline
     }
 }
 
 public extension LorisLabsApp {
-    /// Full LorisLabs portfolio (live apps only). Update as the catalog grows.
-    static let portfolio: [LorisLabsApp] = [
-        LorisLabsApp(
-            name: "Lumen for Frigate",
-            bundleIdentifier: "com.lorislab.lumenforfrigate.Lumen-for-Frigate",
-            ascAppId: "6760238729",
-            tagline: "Native multi-platform Frigate NVR companion",
-            category: "Utilities"
-        ),
-        LorisLabsApp(
-            name: "LumenTV",
-            bundleIdentifier: "com.lorislab.lumenforfrigate.tv.LumenTV",
-            ascAppId: "6760317319",
-            tagline: "Frigate cameras on your Apple TV",
-            category: "Utilities"
-        ),
-        LorisLabsApp(
-            name: "Clasp",
-            bundleIdentifier: "com.lorislab.claspapp",
-            ascAppId: "6759068382",
-            tagline: "Cross-device clipboard manager",
-            category: "Productivity"
-        ),
-        LorisLabsApp(
-            name: "TypeMetrics",
-            bundleIdentifier: "com.LorisLabs.typemetrics",
-            ascAppId: "6758631803",
-            tagline: "Understand how you type",
-            category: "Productivity"
-        ),
-        LorisLabsApp(
-            name: "404 Network",
-            bundleIdentifier: "com.lorislab.app404",
-            ascAppId: "6760702536",
-            tagline: "Network diagnostics, simplified",
-            category: "Utilities"
-        ),
-    ]
+    /// Public Apple release snapshot. Refresh with Scripts/update-portfolio-catalog.py.
+    static let portfolio: [LorisLabsApp] = {
+        guard let url = Bundle.module.url(forResource: "catalog", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let apps = try? JSONDecoder().decode([LorisLabsApp].self, from: data) else {
+            assertionFailure("Missing or invalid bundled LorisLabs catalogue")
+            return []
+        }
+        return apps
+    }()
 
-    /// Filter the portfolio to apps OTHER than the current one (for "More from…" lists).
     static func othersThan(_ currentBundleIdentifier: String) -> [LorisLabsApp] {
-        portfolio.filter { $0.bundleIdentifier != currentBundleIdentifier }
+        let current = currentBundleIdentifier.lowercased()
+        return portfolio.filter {
+            let own = $0.bundleIdentifier.lowercased()
+            return current != own && !current.hasPrefix(own + ".")
+        }
+    }
+}
+
+/// Shared labels for hosts that provide their own Settings styling.
+public enum PortfolioText {
+    public static func title(locale: Locale = .current) -> String {
+        let language = locale.language.languageCode?.identifier == "fr" ? "fr" : "en"
+        let localized = Bundle.module.path(forResource: language, ofType: "lproj").flatMap(Bundle.init(path:)) ?? .module
+        return localized.localizedString(forKey: "More from LorisLabs", value: nil, table: nil)
     }
 }

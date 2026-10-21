@@ -47,15 +47,16 @@ public protocol IncrementalCloudDatabase: CloudDatabase {
 /// Where change tokens are persisted between launches.
 ///
 /// Behind a protocol because the right home differs per app: `UserDefaults` for a
-/// single app, an App Group for an app + extension, the Keychain when the token
-/// must survive a reinstall.
+/// single app or a host transaction containing fetched domain state + checkpoint.
+/// A token alone does not authenticate an account, scope, freshness or progress.
 public protocol ChangeTokenStore: Sendable {
     func token(for key: String) -> Data?
     func setToken(_ token: Data?, for key: String)
 }
 
-/// `UserDefaults`-backed store. Pass an App Group suite when a widget or extension
-/// syncs too — otherwise each process keeps its own token and they fight.
+/// Legacy convenience only, not atomic with domain data and not a writer lock.
+/// An App Group shares bytes, not transaction ownership or process coordination.
+/// Prefer host transactions and ScopedSyncCheckpoint for new integrations.
 public struct UserDefaultsChangeTokenStore: ChangeTokenStore {
     // The suite *name* is stored rather than the `UserDefaults` instance:
     // `UserDefaults` is not Sendable, and holding one would make this struct

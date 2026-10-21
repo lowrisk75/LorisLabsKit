@@ -8,7 +8,7 @@ import Foundation
 /// above `CloudKitDatabase` deals in `SyncValue`, never `CKRecordValue`.
 extension SyncValue {
 
-    /// CloudKit representation, or `nil` when the value cannot be stored as-is.
+    /// CloudKit representation. Actual server schema acceptance is a separate gate.
     var ckValue: CKRecordValue {
         switch self {
         case .string(let v):     return v as CKRecordValue
@@ -24,23 +24,44 @@ extension SyncValue {
 
     /// Read a CloudKit value back.
     ///
-    /// CloudKit stores booleans as numbers, so a round-trip cannot tell `true` from
-    /// `1`. The app knows which its schema means, so `Int` is returned and callers
-    /// use `record.bool(_:)` only on fields they wrote as booleans — guessing here
-    /// would silently corrupt integer fields holding 0 or 1.
+    /// Decode the observable native representation, not an inferred schema.
+    /// Integral NSNumber encodings become Int exactly, floating encodings stay
+    /// Double. Booleans encoded as 0/1 cannot recover their original Swift type;
+    /// callers need an explicit schema adapter rather than bool(_:) guessing.
     static func from(_ value: Any) -> SyncValue? {
         switch value {
         case let v as String:   return .string(v)
         case let v as Date:     return .date(v)
         case let v as Data:     return .data(v)
         case let v as [String]: return .stringList(v)
-        case let v as [Int]:    return .intList(v)
-        case let v as NSNumber:
-            // Distinguish integral from fractional; `NSNumber` erases the original.
-            let d = v.doubleValue
-            return d == d.rounded() && abs(d) < 9e15 ? .int(v.intValue) : .double(d)
+        case let v as [NSNumber]:
+            var integers: [Int] = []
+            for number in v {
+                guard case .int(let integer) = fromNumber(number) else { return nil }
+                integers.append(integer)
+            }
+            return .intList(integers)
+        case let v as NSNumber: return fromNumber(v)
         default:
             return nil
+        }
+    }
+
+    private static func fromNumber(_ number: NSNumber) -> SyncValue? {
+        // Decimal -> binary conversion can lose precision; no Decimal case exists.
+        guard !(number is NSDecimalNumber) else { return nil }
+        switch String(cString: number.objCType) {
+        case "c", "s", "i", "l", "q", "B":
+            guard let value = Int(exactly: number.int64Value) else { return nil }
+            return .int(value)
+        case "C", "S", "I", "L", "Q":
+            guard let value = Int(exactly: number.uint64Value) else { return nil }
+            return .int(value)
+        case "f", "d":
+            let value = number.doubleValue
+            guard value.isFinite else { return nil }
+            return .double(value)
+        default: return nil
         }
     }
 }
@@ -55,13 +76,15 @@ extension SyncRecord {
         record[modifiedKey] = modifiedAt as CKRecordValue
     }
 
-    /// Build from a `CKRecord`, keeping every field the schema carries.
+    /// All-or-error mapping: never return a partial record that could later erase
+    /// omitted fields when saved with allKeys. Rich native fields need an adapter.
     init?(from record: CKRecord, type: String, modifiedKey: String) {
-        guard let modified = record[modifiedKey] as? Date else { return nil }
+        guard record.recordType == type,
+              let modified = record[modifiedKey] as? Date else { return nil }
 
         var fields: [String: SyncValue] = [:]
         for key in record.allKeys() where key != modifiedKey {
-            guard let raw = record[key], let value = SyncValue.from(raw) else { continue }
+            guard let raw = record[key], let value = SyncValue.from(raw) else { return nil }
             fields[key] = value
         }
 

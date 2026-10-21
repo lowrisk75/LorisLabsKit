@@ -1,42 +1,62 @@
 import SwiftUI
+import StoreKit
 
-/// Convenience modifier that asks `SmartReviewPromptManager` to prompt if criteria are met,
-/// when the modified view appears. Intended to be attached to "moment of success" views.
-///
-/// Example:
-/// ```swift
-/// EventDetailView(event: event)
-///     .reviewPromptOnAppear(reviewManager)
-/// ```
+/// Waits for a real completion and a quiet, active scene. Navigation never records a completion.
 public struct ReviewPromptOnAppearModifier: ViewModifier {
     private let manager: SmartReviewPromptManager
-    // `requestReview` (RequestReviewAction) is unavailable on tvOS.
-    #if !os(tvOS)
+    private let isIdle: Bool
+    private let additionalEligibility: @MainActor () -> Bool
+    @State private var interacting = false
+    @Environment(\.scenePhase) private var scenePhase
+    #if !os(tvOS) && !os(watchOS)
     @Environment(\.requestReview) private var requestReview
     #endif
 
-    public init(manager: SmartReviewPromptManager) {
-        self.manager = manager
+    public init(manager: SmartReviewPromptManager, isIdle: Bool = true,
+                additionalEligibility: @escaping @MainActor () -> Bool = { true }) {
+        self.manager = manager; self.isIdle = isIdle
+        self.additionalEligibility = additionalEligibility
     }
-
+    private struct Context: Equatable {
+        let completion: UUID?
+        let active: Bool
+        let idle: Bool
+    }
     public func body(content: Content) -> some View {
-        #if os(tvOS)
-        content // No App Store review prompt on tvOS — no-op.
+        #if os(tvOS) || os(watchOS)
+        content
         #else
-        content.task {
-            // 0.5s delay so the success view actually renders before the prompt appears.
-            try? await Task.sleep(for: .milliseconds(500))
-            manager.requestIfAppropriate(via: requestReview)
+        let context = Context(completion: manager.completionToken, active: scenePhase == .active,
+                              idle: isIdle && !interacting && !manager.interactionInProgress)
+        content.simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in interacting = true }
+                .onEnded { _ in interacting = false }
+        )
+        .onDisappear { manager.cancelPendingReview() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { manager.cancelPendingReview() }
+        }
+        .task(id: context) {
+            await manager.requestAfterPause(isSceneActive: { context.active },
+                                            isIdle: { context.idle && additionalEligibility() }) {
+                requestReview()
+            }
         }
         #endif
     }
 }
 
 public extension View {
-    /// Asks `SmartReviewPromptManager` to prompt if criteria are met, on appear.
-    /// Should ONLY be attached to views that represent a moment of success
-    /// (an action the user just completed successfully).
+    /// Attach to a completion scene; set isIdle=false during sheets, alerts, editing or navigation.
+    /// additionalEligibility rechecks native window/modal state immediately before the attempt.
+    func reviewPromptWhenIdle(_ manager: SmartReviewPromptManager, isIdle: Bool = true,
+                             additionalEligibility: @escaping @MainActor () -> Bool = { true }) -> some View {
+        modifier(ReviewPromptOnAppearModifier(manager: manager, isIdle: isIdle,
+                                             additionalEligibility: additionalEligibility))
+    }
+    /// Compatibility entry point. Also requires recordCompletedAction() in the current session.
     func reviewPromptOnAppear(_ manager: SmartReviewPromptManager) -> some View {
-        modifier(ReviewPromptOnAppearModifier(manager: manager))
+        reviewPromptWhenIdle(manager)
     }
 }

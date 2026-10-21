@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import LorisSecurity
 
 /// Canonical keychain wrapper — unifies the two forks copied across the portfolio:
 /// `KeychainStore` (Éclair, 98L) and `KeychainHelper` (Clasp/CoreShield/Terrace,
@@ -7,14 +8,28 @@ import Security
 /// `Sendable`, service-scoped design (the better of the two), with the ergonomics
 /// of the static one.
 ///
-/// Items are `WhenUnlockedThisDeviceOnly` — never synced to iCloud Keychain.
+/// New items use `WhenUnlockedThisDeviceOnly`. Existing identity/protection is
+/// preserved; this legacy bridge does not silently select a different keychain.
 public struct LorisKeychain: Sendable {
     public let service: String
+    private let storage: LegacyKeychainStore
 
     /// - Parameter service: keychain service scope. Defaults to the bundle id, so
-    ///   two LorisLabs apps on the same device never read each other's items.
+    ///   existing service names remain unchanged. Default-group behavior still
+    ///   depends on the signed host's entitlements; it is not a sharing guarantee.
     public init(service: String = Bundle.main.bundleIdentifier ?? "com.lorislab.unknown") {
+        self.init(service: service, backend: SystemLegacyKeychainBackend())
+    }
+
+    /// Explicit signed group for hosts that require a known private/shared
+    /// namespace. The nil-group legacy initializer does NOT prove privacy.
+    public init(service: String, accessGroup: String) {
+        self.init(service: service, accessGroup: accessGroup, backend: SystemLegacyKeychainBackend())
+    }
+
+    init(service: String, accessGroup: String? = nil, backend: any LegacyKeychainBackend) {
         self.service = service
+        storage = LegacyKeychainStore(service: service, accessGroup: accessGroup, backend: backend)
     }
 
     public enum KeychainError: Error, Sendable, Equatable {
@@ -22,32 +37,21 @@ public struct LorisKeychain: Sendable {
         case notUTF8
     }
 
-    private func baseQuery(_ key: String) -> [CFString: Any] {
-        [kSecClass: kSecClassGenericPassword, kSecAttrService: service, kSecAttrAccount: key]
+    private func perform<T>(_ action: () throws -> T) throws -> T {
+        do { return try action() }
+        catch let error as LorisSecurity.KeychainError {
+            throw KeychainError.unexpectedStatus(error.status ?? (error == .malformedData ? errSecDecode : errSecParam))
+        }
     }
 
     // MARK: Data
 
     public func save(_ data: Data, forKey key: String) throws {
-        var q = baseQuery(key)
-        SecItemDelete(q as CFDictionary)                 // upsert: last write wins
-        q[kSecValueData] = data
-        q[kSecAttrAccessible] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-        let status = SecItemAdd(q as CFDictionary, nil)
-        guard status == errSecSuccess else { throw KeychainError.unexpectedStatus(status) }
+        try perform { try storage.upsert(data, account: key) }
     }
 
     public func data(forKey key: String) throws -> Data? {
-        var q = baseQuery(key)
-        q[kSecReturnData] = true
-        q[kSecMatchLimit] = kSecMatchLimitOne
-        var out: CFTypeRef?
-        let status = SecItemCopyMatching(q as CFDictionary, &out)
-        switch status {
-        case errSecSuccess:   return out as? Data
-        case errSecItemNotFound: return nil
-        default:              throw KeychainError.unexpectedStatus(status)
-        }
+        try perform { try storage.read(account: key) }
     }
 
     // MARK: String convenience
@@ -65,13 +69,10 @@ public struct LorisKeychain: Sendable {
     // MARK: Delete / probe
 
     public func delete(forKey key: String) throws {
-        let status = SecItemDelete(baseQuery(key) as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else {
-            throw KeychainError.unexpectedStatus(status)
-        }
+        try perform { try storage.remove(account: key) }
     }
 
     public func contains(_ key: String) -> Bool {
-        SecItemCopyMatching(baseQuery(key) as CFDictionary, nil) == errSecSuccess
+        (try? storage.contains(account: key)) ?? false
     }
 }

@@ -1,0 +1,67 @@
+[
+  {
+    "input": "Synthetic only",
+    "once": "Synthetic only",
+    "twice": "Synthetic only"
+  },
+  {
+    "input": "Ｓｙｎｔｈｅｔｉｃ ｐａｓｓｗｏｒｄ＝ａｂｃｄｅｆｇｈｉ",
+    "once": "Synthetic [SECRET REDACTED]",
+    "twice": "Synthetic [SECRET REDACTED]"
+  },
+  {
+    "input": "Synthetic https://synthetic.invalid/path?key=synthetic-only",
+    "once": "Synthetic https://synthetic.invalid/path?[QUERY REDACTED]",
+    "twice": "Synthetic https://synthetic.invalid/path?[QUERY REDACTED] REDACTED]"
+  },
+  {
+    "input": "Synthetic https://test:synthetic-only@synthetic.invalid/path?key=synthetic-only",
+    "once": "Synthetic https://[USERINFO REDACTED]@synthetic.invalid/path?key=synthetic-only",
+    "twice": "Synthetic https://[USERINFO REDACTED]@synthetic.invalid/path?key=synthetic-only"
+  },
+  {
+    "input": "Synthetic me@synthetic.invalid /Users/Synthetic/example 48.12345,2.12345",
+    "once": "Synthetic [EMAIL REDACTED] /Users/[USER REDACTED]/example [LOCATION REDACTED]",
+    "twice": "Synthetic [EMAIL REDACTED] /Users/[USER REDACTED] REDACTED]/example [LOCATION REDACTED]"
+  },
+  {
+    "input": "Synthetic cookie: session=synthetic-only\nnext",
+    "once": "Synthetic [SECRET REDACTED]\nnext",
+    "twice": "Synthetic [SECRET REDACTED]\nnext"
+  },
+  {
+    "input": "Synthetic client_secret=\"synthetic-only\"",
+    "once": "Synthetic [SECRET REDACTED]\"",
+    "twice": "Synthetic [SECRET REDACTED]\""
+  },
+  {
+    "input": "Synthetic -----BEGIN PRIVATE KEY-----\nSYNTHETIC-ONLY-NOT-A-KEY\n-----END PRIVATE KEY-----",
+    "once": "Synthetic [SECRET REDACTED]",
+    "twice": "Synthetic [SECRET REDACTED]"
+  },
+  {
+    "input": "Synthetic github_pat_sssssssssssssssssssssssss",
+    "once": "Synthetic [SECRET REDACTED]",
+    "twice": "Synthetic [SECRET REDACTED]"
+  },
+  {
+    "input": "Synthetic AKIASSSSSSSSSSSSSSSS",
+    "once": "Synthetic [SECRET REDACTED]",
+    "twice": "Synthetic [SECRET REDACTED]"
+  },
+  {
+    "input": "Synthetic sk-sssssssssssssssssssssssss",
+    "once": "Synthetic [SECRET REDACTED]",
+    "twice": "Synthetic [SECRET REDACTED]"
+  },
+  {
+    "input": "Synthetic eyJssssssssss.ssssssssss.ssssssssss",
+    "once": "Synthetic [SECRET REDACTED]",
+    "twice": "Synthetic [SECRET REDACTED]"
+  },
+  {
+    "input": "Synthetic\u0000 token=synthetic-only",
+    "once": "Synthetic [SECRET REDACTED]",
+    "twice": "Synthetic [SECRET REDACTED]"
+  }
+]

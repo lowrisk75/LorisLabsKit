@@ -110,10 +110,15 @@ public enum SyncAccountStatus: Sendable, Equatable {
 public protocol CloudDatabase: Sendable {
     func accountStatus() async -> SyncAccountStatus
     /// Save (insert-or-replace) records in the user's private zone.
+    /// An error may follow partial remote effects. Preserve local intent and
+    /// reconcile before retrying; this Void API is not a durable revision ACK.
     func save(_ records: [SyncRecord]) async throws
     /// Every record of `type` in the zone (one profile → a tiny set).
     func fetchAll(type: String) async throws -> [SyncRecord]
     /// Delete records by id (GDPR erasure — wiping the synced profile).
+    /// Failure does not imply that nothing was deleted; do not blindly replay.
+    /// Native CloudKit prechecks type/identity but cannot atomically bind that read
+    /// to ID-only deletion. Replacement races/cascades need a host/provider policy.
     func delete(ids: [String], type: String) async throws
 }
 

@@ -24,16 +24,19 @@ let package = Package(
         .library(name: "LorisReports", targets: ["LorisReports"]),
         .library(name: "LorisDesignCore", targets: ["LorisDesignCore"]),
     ],
+    dependencies: [
+        .package(path: "../LorisFoundation"),
+    ],
     targets: [
-        .target(name: "LorisLabsKit"),
+        .target(name: "LorisLabsKit", dependencies: [.product(name: "LorisSecurity", package: "LorisFoundation")], resources: [.process("Resources")]),
         .target(name: "LorisSync"),
         .target(
             name: "LorisReports",
             resources: [.process("Resources")]
         ),
         .target(name: "LorisDesignCore"),
-        .testTarget(name: "LorisLabsKitTests", dependencies: ["LorisLabsKit"]),
-        .testTarget(name: "LorisReportsTests", dependencies: ["LorisReports"]),
+        .testTarget(name: "LorisLabsKitTests", dependencies: ["LorisLabsKit", .product(name: "LorisSecurityTesting", package: "LorisFoundation")]),
+        .testTarget(name: "LorisReportsTests", dependencies: ["LorisReports"], resources: [.process("Fixtures")]),
         .testTarget(name: "LorisSyncTests", dependencies: ["LorisSync"]),
     ]
 )

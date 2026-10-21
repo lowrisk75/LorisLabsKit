@@ -2,6 +2,65 @@
 
 All notable changes to LorisLabsKit are documented here.
 
+## Unreleased — Sync deletion preflight, 2026-10-20
+
+- Read/verify every private deletion target before one batch dispatch; refuse mismatched identities/exact-UTF8 types, blank types and incomplete/failed lookups without deleting a prefix. Propagate provider errors, retain exact ACK checking and no replay/false late rollback.
+-13synthetic callback methods, no provider calls. This is preflight only, NOT atomic type/generation deletion: replacement/account/cascade/host coordination and production qualification remain OPEN. No tombstone schema or app migration.
+
+## Unreleased — Sync field integrity, 2026-10-20
+
+- Reject whole native records on unsupported fields or mismatched record type instead of silently omitting/relabeling content. Existing invalidRecord propagation prevents partial checkpoint success.
+- Decode native numeric encodings without Double-based integer inference; range-check exact signed/unsigned Int, retain finite floating representation, reject unrepresentable decimal/nonfinite/numeric-list data. Eight red/green native-framework test methods without accounts/network.
+- No public API/platform change, automatic schema migration, bool/empty-list source-type recovery, partial allKeys safety, typed-delete/CAS/provider or release qualification.
+
+## Unreleased — Sync checkpoint decoding, 2026-10-20
+
+- Throw invalidCheckpoint for present invalid/empty/wrong-class/nil-root archives instead of silently starting from nil. Decode before zone setup, check cancellation before/after decoding and retain the existing explicit server-expiry reset path.
+- Five local native-framework archive regression methods (no container/account/network). No token format change, app migration or provider/host-transaction/security/release qualification.
+
+## Unreleased — Sync revision outbox core, 2026-10-20
+
+- Counter-review fixes: exact UTF-8 scope/key equality and matching hashing; reserve encoded session activation capacity during offline acceptance/restore. Four red/green regression methods. Older overfull snapshots fail explicitly without data reset; host recovery remains required.
+
+- Add a bounded transaction-owned revision journal under existing LorisSync: fixed account/qualified namespace, typed keys, monotonic revisions, coalesced intent and exact captured mutation receipts.
+- Versioned restore refuses malformed/foreign state; sessions support same-owner transaction reload and explicit lifecycle invalidation. No independent persistence, automatic transport, encryption, CAS or remote-ordering guarantee.
+- Add 19 synthetic invariant and5 test-only SQLite transaction/reopen methods. Actual host adapters/apps, abrupt crash/power loss, provider/account and independent security/release gates remain separate.
+
+
+## Unreleased — Sync sharing resolution, 2026-10-20
+
+- Treat only explicit unknownItem as absence; propagate lookup and acceptance-metadata errors, verify root/share identity/type/zone and derive ownership from participant role instead of optional identity equality.
+- Resolve unique private/shared targets before removal, reject ambiguous/incomplete/oversized scans and duplicate short shared IDs; require scope-appropriate roles before deleting the pinned share with validated ACK.
+- Add 18 synthetic Swift Testing methods. Native/account/role freshness and TOCTOU, qualified identities, durable outbox/CAS/crash and production security qualification remain open.
+
+
+## Unreleased — Sync transport acknowledgements, 2026-10-20
+
+- Validate exact save/delete result coverage and returned saved-object identities for records, zones, subscriptions and share acceptance. Reject invalid duplicate/overlapping requests before their dispatch; propagate setup/item/global failures.
+- Remove unproven serverRejectedRequest/alreadyShared success shortcuts; explicitly accepted metadata is a no-op. Build ShareInfo from the acknowledged server share.
+- Add 14 synthetic Swift Testing methods including profile-engine propagation, cancellation and no-replay regressions. Identity confirmation is not a durable revision ACK or rollback guarantee; native/account/outbox/CAS/crash/release gates remain open.
+
+
+## Unreleased — Sync read integrity, 2026-10-20
+
+- Drain private/shared query cursors and incremental moreComing pages; propagate per-record/page/shared-zone read failures rather than report partial success.
+- Keep the final token private until all pages succeed; filter deletion record types, fold page events and reject ambiguous unordered changes. Add CloudSyncReadError without changing protocol signatures/platform minimums.
+- Add cancellation/page-limit checks and 10 synthetic Swift Testing methods. Native CloudKit execution, durable outbox/ACK, account ownership and release remain unqualified; no apps migrated.
+
+
+## Unreleased — Security convergence, 2026-10-20
+
+- Delegate LorisKeychain to Foundation's explicit legacy compatibility bridge through a relative local dependency; preserve service/default-group/platform-default storage and empty-data APIs.
+- Value-only update/add/duplicate-update replaces destructive delete/add rotation. Refused writes preserve old bytes and status; existing protection is never silently rewritten.
+- Synthetic backend tests replace implicit native Keychain writes in LorisKeychainTests. Signed-host/file-Keychain/ACL qualification remains open; trial/provider/app migration and publication not performed.
+
+## Unreleased — 2026-10-15
+
+- Offline catalogue of 21 publicly released apps, official local icons, FR/EN copy, reusable Settings menu/link, accessible rows, and current-app/debug/extension exclusion.
+- Review requests require a recent completed action in the current session, session/quiet delays, persistent cooldown and version guards. Navigation and backgrounding cancel the opportunity. The native prompt remains under StoreKit control.
+- Sève adopts the shared review policy and catalogue through an explicitly hashed vendored snapshot; existing Reports source bytes and activation gates are preserved.
+- Hosts can recheck native modal/window state with `additionalEligibility` before attempting a review. The portfolio rollout journal records thirteen local integrations, their builds and the eight checkouts reserved to other writers.
+
 ## [0.8.0] — 2026-08-05
 
 ### Added — `LorisPaywall`, the StoreKit engine the kit never had

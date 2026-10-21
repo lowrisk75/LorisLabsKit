@@ -1,14 +1,21 @@
 import Foundation
 
 /// Syncs a single `SyncablePayload` over a `CloudDatabase`. Conflict policy is
-/// last-writer-wins by record `modifiedAt` — correct for one profile a caregiver
-/// edits (concurrent two-device edits are rare). An `actor` so concurrent
-/// push/pull serialize cleanly.
+/// legacy last-writer-wins by record `modifiedAt`, not a general conflict resolver.
+/// One complete operation at a time; overlap fails explicitly rather than reentering
+/// a stale decision, queueing unbounded work or automatically replaying writes.
 public actor CloudSyncEngine<P: SyncablePayload> {
     private let database: CloudDatabase
     private let clock: @Sendable () -> Date
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+    private var operationInProgress = false
+
+    private func beginOperation() throws {
+        try Task.checkCancellation()
+        guard !operationInProgress else { throw CloudSyncOperationError.operationInProgress }
+        operationInProgress = true
+    }
 
     public init(database: CloudDatabase, clock: @escaping @Sendable () -> Date = { Date() }) {
         self.database = database
@@ -21,50 +28,90 @@ public actor CloudSyncEngine<P: SyncablePayload> {
 
     /// Upload the local payload, stamped now.
     public func push(_ payload: P) async throws {
+        try beginOperation()
+        defer { operationInProgress = false }
+        try await pushWithinOperation(payload)
+    }
+
+    private func pushWithinOperation(_ payload: P) async throws {
         guard await isAvailable() else { throw SyncError.accountUnavailable }
+        try Task.checkCancellation()
         guard let blob = try? encoder.encode(payload) else { throw SyncError.encodingFailed }
         let record = SyncRecord(id: payload.id, type: P.recordType, blob: blob, modifiedAt: clock())
+        guard record.modifiedAt.timeIntervalSinceReferenceDate.isFinite else { throw CloudSyncPayloadError.invalidRecord }
+        try Task.checkCancellation()
         try await database.save([record])
     }
 
     /// The newest remote payload, or nil if the cloud has none.
     public func pull() async throws -> P? {
+        try beginOperation()
+        defer { operationInProgress = false }
         guard await isAvailable() else { throw SyncError.accountUnavailable }
+        try Task.checkCancellation()
         let records = try await database.fetchAll(type: P.recordType)
-        guard let newest = records.max(by: { $0.modifiedAt < $1.modifiedAt }) else { return nil }
-        return try decoder.decode(P.self, from: newest.blob)
+        try Task.checkCancellation()
+        guard let remote = try singleRemote(records, expectedID: nil) else { return nil }
+        return try decodePayload(remote)
     }
 
-    /// Erase the payload from the cloud (GDPR erasure).
+    /// Request provider deletion; not a complete legal/privacy erasure workflow.
+    /// Native physical data deletion is disabled unless explicitly configured.
     public func delete(_ id: String) async throws {
+        try beginOperation()
+        defer { operationInProgress = false }
         guard await isAvailable() else { throw SyncError.accountUnavailable }
+        try Task.checkCancellation()
         try await database.delete(ids: [id], type: P.recordType)
     }
 
-    /// One-shot reconcile for first run / launch: returns the payload to ADOPT
-    /// locally (cloud was newer or local was absent), or nil if the local copy
-    /// already leads — in which case the caller should `push` it. The caller
-    /// passes its local payload + the time it last changed.
+    /// One-shot legacy profile reconcile: may upload local state, or return an
+    /// adoption candidate. Host must commit adoption only if its local revision
+    /// is still current; this actor cannot protect edits in the host's store.
     public func reconcile(local: P?, localModifiedAt: Date) async throws -> Reconciliation<P> {
+        try beginOperation()
+        defer { operationInProgress = false }
         guard await isAvailable() else { return .offline }
+        try Task.checkCancellation()
         let records = try await database.fetchAll(type: P.recordType)
-        let remote = records.max(by: { $0.modifiedAt < $1.modifiedAt })
+        try Task.checkCancellation()
+        let remote = try singleRemote(records, expectedID: local?.id)
 
         switch (local, remote) {
         case (nil, nil):
             return .nothingYet
         case let (.some(localPayload), nil):
-            try await push(localPayload)
+            try await pushWithinOperation(localPayload)
             return .pushedLocal
         case let (_, .some(remoteRecord)) where local == nil || remoteRecord.modifiedAt > localModifiedAt:
-            let payload = try decoder.decode(P.self, from: remoteRecord.blob)
+            let payload = try decodePayload(remoteRecord)
             return .adoptRemote(payload)
         case let (.some(localPayload), .some):
-            try await push(localPayload)
+            try await pushWithinOperation(localPayload)
             return .pushedLocal
         default:
             return .nothingYet
         }
+    }
+
+    private func singleRemote(_ records: [SyncRecord], expectedID: String?) throws -> SyncRecord? {
+        guard records.count <= 1 else { throw CloudSyncPayloadError.ambiguousProfiles }
+        guard let remote = records.first else { return nil }
+        guard remote.type.utf8.elementsEqual(P.recordType.utf8),
+              remote.modifiedAt.timeIntervalSinceReferenceDate.isFinite else {
+            throw CloudSyncPayloadError.invalidRecord
+        }
+        if let expectedID, !remote.id.utf8.elementsEqual(expectedID.utf8) {
+            throw CloudSyncPayloadError.inconsistentIdentity
+        }
+        return remote
+    }
+    private func decodePayload(_ record: SyncRecord) throws -> P {
+        let payload = try decoder.decode(P.self, from: record.blob)
+        guard payload.id.utf8.elementsEqual(record.id.utf8) else {
+            throw CloudSyncPayloadError.inconsistentIdentity
+        }
+        return payload
     }
 }
 
