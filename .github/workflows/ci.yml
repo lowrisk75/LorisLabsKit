@@ -22,19 +22,24 @@ jobs:
         with:
           xcode-version: latest-stable
 
-      # Runs after third-party actions so they never see the token.
-      # LorisFoundation is a private repository. FOUNDATION_READ_TOKEN is a
-      # fine-grained token with read-only Contents access to that repo only.
+      # Runs after third-party actions so they never see the key.
+      # LorisFoundation is private. FOUNDATION_DEPLOY_KEY is the private half of
+      # a read-only deploy key registered on that repository only.
       - name: Authorize private LorisFoundation dependency
         env:
-          FOUNDATION_READ_TOKEN: ${{ secrets.FOUNDATION_READ_TOKEN }}
+          FOUNDATION_DEPLOY_KEY: ${{ secrets.FOUNDATION_DEPLOY_KEY }}
         run: |
-          if [ -z "$FOUNDATION_READ_TOKEN" ]; then
-            echo "::error::Missing FOUNDATION_READ_TOKEN secret (read access to lowrisk75/LorisFoundation)."
+          if [ -z "$FOUNDATION_DEPLOY_KEY" ]; then
+            echo "::error::Missing FOUNDATION_DEPLOY_KEY secret (read-only deploy key for lowrisk75/LorisFoundation)."
             exit 1
           fi
-          git config --global \
-            url."https://x-access-token:${FOUNDATION_READ_TOKEN}@github.com/lowrisk75/LorisFoundation".insteadOf \
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$FOUNDATION_DEPLOY_KEY" > ~/.ssh/foundation_deploy
+          chmod 600 ~/.ssh/foundation_deploy
+          # GitHub host keys from its HTTPS API (no trust-on-first-use).
+          curl -fsSL https://api.github.com/meta | python3 -c 'import json,sys; [print("github.com", k) for k in json.load(sys.stdin)["ssh_keys"]]' > ~/.ssh/known_hosts
+          git config --global core.sshCommand "ssh -i ~/.ssh/foundation_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+          git config --global url."git@github.com:lowrisk75/LorisFoundation".insteadOf \
             "https://github.com/lowrisk75/LorisFoundation"
 
       - name: Swift version
