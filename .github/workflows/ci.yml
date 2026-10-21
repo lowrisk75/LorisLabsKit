@@ -11,7 +11,21 @@ jobs:
     name: Build & Test (macOS)
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+
+      # LorisFoundation is a private repository. FOUNDATION_READ_TOKEN is a
+      # fine-grained token with read-only Contents access to that repo only.
+      - name: Authorize private LorisFoundation dependency
+        env:
+          FOUNDATION_READ_TOKEN: ${{ secrets.FOUNDATION_READ_TOKEN }}
+        run: |
+          if [ -z "$FOUNDATION_READ_TOKEN" ]; then
+            echo "::error::Missing FOUNDATION_READ_TOKEN secret (read access to lowrisk75/LorisFoundation)."
+            exit 1
+          fi
+          git config --global \
+            url."https://x-access-token:${FOUNDATION_READ_TOKEN}@github.com/lowrisk75/LorisFoundation".insteadOf \
+            "https://github.com/lowrisk75/LorisFoundation"
 
       # LorisSync uses OS 26 SDK APIs (sharing options, administrator role):
       # build with the newest stable Xcode on the runner, never a pinned old one.
