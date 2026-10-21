@@ -4,7 +4,7 @@
 
 Shared SwiftUI utilities for the LorisLabs app portfolio. Built for iOS 17+, macOS 14+, tvOS 17+, watchOS 10+, visionOS 1+.
 
-Latest recorded version: **0.8.0** (local engagement changes are unreleased) — see [CHANGELOG.md](CHANGELOG.md).
+Latest release: **0.10.0** (requires LorisFoundation 0.2.0+) — see [CHANGELOG.md](CHANGELOG.md).
 
 ## What's inside
 

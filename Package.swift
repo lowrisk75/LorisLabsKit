@@ -1,6 +1,6 @@
 // swift-tools-version: 6.0
 // LorisLabsKit — the LorisLabs app chassis: shared foundation for the whole portfolio
-// Version: 0.8.0 (see CHANGELOG.md)
+// Version: 0.10.0 (see CHANGELOG.md)
 //
 // v2 layout — one repo, modular products; apps import only what they use:
 //   LorisLabsKit    review prompts, cross-promo, paywall, referral, trial + license (existing consumers keep working)
