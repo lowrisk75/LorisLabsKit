@@ -28,6 +28,17 @@ public enum SharePermission: Sendable, Equatable {
     case readWrite
 }
 
+/// Who may join a share.
+public enum ShareAccess: Sendable, Equatable {
+    /// Default. Only people the owner adds by name through Apple's sharing UI
+    /// (`SyncShareItem` with SwiftUI `ShareLink`) can join; a forwarded link is
+    /// useless to anyone else. Each invitee's permission is chosen in that UI.
+    case invitedOnly
+    /// Anyone holding the link joins with this permission. Explicit opt-in:
+    /// a leaked link grants access and cannot be revoked per person.
+    case anyoneWithLink(SharePermission)
+}
+
 /// A `CloudDatabase` that can also share records with other iCloud users.
 ///
 /// Sharing lives in a *second* database (`sharedCloudDatabase`), not the private
@@ -40,10 +51,12 @@ public protocol SharedCloudDatabase: CloudDatabase {
     /// Create a share for a record, or return the existing one. Idempotent:
     /// CloudKit rejects a second share on the same record, so callers must never
     /// have to check first.
+    /// An existing share with a different access throws
+    /// `CloudSyncSharePermissionError.existingPermissionMismatch`.
     func share(recordID: String,
                type: String,
                title: String?,
-               permission: SharePermission) async throws -> ShareInfo
+               access: ShareAccess) async throws -> ShareInfo
 
     /// The share for this record if one exists, `nil` otherwise.
     func existingShare(recordID: String, type: String) async throws -> ShareInfo?
@@ -53,11 +66,44 @@ public protocol SharedCloudDatabase: CloudDatabase {
     func acceptShare(at url: URL) async throws
 
     /// Records from the **shared** database. These never appear in `fetchAll`.
+    /// Strict: one unreadable record fails the whole read.
     func fetchShared(type: String) async throws -> [SyncRecord]
 
-    /// Owner: revoke the share for everyone. Participant: leave it.
-    /// `ShareInfo.isOwner` tells the caller which of the two will happen.
+    /// Shared records plus explicitly quarantined unreadable ones (per the
+    /// database's read policy), so one sharer's bad record cannot block the rest.
+    func fetchSharedReport(type: String) async throws -> SyncReadReport
+
+    /// Legacy: owner revokes, participant leaves. Refuses (`ambiguousRecord`) when
+    /// the name exists both privately and in a shared zone, which a participant
+    /// can provoke. Use `revokeOwnedShare` / `leaveShare`.
+    @available(*, deprecated, message: "Ambiguity can block revocation; use revokeOwnedShare(recordID:type:) or leaveShare(recordID:type:)")
     func stopSharing(recordID: String, type: String) async throws
+
+    /// Owner: revoke the share of a private record for everyone. Never consults
+    /// shared zones, so a colliding name there cannot block it.
+    func revokeOwnedShare(recordID: String, type: String) async throws
+
+    /// Participant: leave a share accepted from someone else. Never touches the
+    /// caller's private records.
+    func leaveShare(recordID: String, type: String) async throws
+
+    /// Owner: change an existing share's access without revoking it, e.g.
+    /// migrate a legacy public link (`share()` now throws
+    /// `existingPermissionMismatch` for it) to `.invitedOnly`.
+    func updateShareAccess(recordID: String, type: String, access: ShareAccess) async throws -> ShareInfo
+}
+
+extension SharedCloudDatabase {
+    /// Invite-only share (the default). Add people with `SyncShareItem` + `ShareLink`.
+    public func share(recordID: String, type: String, title: String?) async throws -> ShareInfo {
+        try await share(recordID: recordID, type: type, title: title, access: .invitedOnly)
+    }
+
+    @available(*, deprecated, message: "Public links are opt-in: use access: .anyoneWithLink(permission), or the invite-only default")
+    public func share(recordID: String, type: String, title: String?,
+                      permission: SharePermission) async throws -> ShareInfo {
+        try await share(recordID: recordID, type: type, title: title, access: .anyoneWithLink(permission))
+    }
 }
 
 public enum ShareError: Error, Equatable {

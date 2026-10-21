@@ -17,7 +17,7 @@ final class SharedSyncTests: XCTestCase {
         await db.seed([record("a")])
 
         let info = try await db.share(recordID: "a", type: "Item",
-                                      title: "Ma liste", permission: .readWrite)
+                                      title: "Ma liste")
 
         XCTAssertTrue(info.isOwner)
         XCTAssertEqual(info.recordID, "a")
@@ -28,8 +28,8 @@ final class SharedSyncTests: XCTestCase {
         let db = MockCloudDatabase()
         await db.seed([record("a")])
 
-        let first = try await db.share(recordID: "a", type: "Item", title: nil, permission: .readWrite)
-        let second = try await db.share(recordID: "a", type: "Item", title: nil, permission: .readWrite)
+        let first = try await db.share(recordID: "a", type: "Item", title: nil, access: .anyoneWithLink(.readWrite))
+        let second = try await db.share(recordID: "a", type: "Item", title: nil, access: .anyoneWithLink(.readWrite))
 
         XCTAssertEqual(first.url, second.url,
                        "CloudKit rejects a second share on one record — reuse must be silent")
@@ -38,7 +38,7 @@ final class SharedSyncTests: XCTestCase {
     func testSharingAnUnknownRecordThrows() async {
         let db = MockCloudDatabase()
         do {
-            _ = try await db.share(recordID: "ghost", type: "Item", title: nil, permission: .readOnly)
+            _ = try await db.share(recordID: "ghost", type: "Item", title: nil, access: .anyoneWithLink(.readOnly))
             XCTFail("sharing a record that does not exist must fail loudly")
         } catch {
             XCTAssertEqual(error as? ShareError, .recordNotFound)
@@ -100,9 +100,9 @@ final class SharedSyncTests: XCTestCase {
     func testOwnerStopsSharingButKeepsTheRecord() async throws {
         let db = MockCloudDatabase()
         await db.seed([record("a")])
-        _ = try await db.share(recordID: "a", type: "Item", title: nil, permission: .readWrite)
+        _ = try await db.share(recordID: "a", type: "Item", title: nil)
 
-        try await db.stopSharing(recordID: "a", type: "Item")
+        try await db.revokeOwnedShare(recordID: "a", type: "Item")
 
         let existing = try await db.existingShare(recordID: "a", type: "Item")
         let priv = try await db.fetchAll(type: "Item")
@@ -115,7 +115,7 @@ final class SharedSyncTests: XCTestCase {
         await db.receiveShare(record("theirs"),
                               from: URL(string: "https://www.icloud.com/share/theirs")!)
 
-        try await db.stopSharing(recordID: "theirs", type: "Item")
+        try await db.leaveShare(recordID: "theirs", type: "Item")
 
         let shared = try await db.fetchShared(type: "Item")
         XCTAssertTrue(shared.isEmpty, "leaving a share must drop the record")
@@ -129,5 +129,38 @@ final class SharedSyncTests: XCTestCase {
         } catch {
             XCTAssertEqual(error as? ShareError, .recordNotFound)
         }
+    }
+
+    // MARK: - Access
+
+    func testDefaultShareIsInviteOnly() async throws {
+        let db = MockCloudDatabase()
+        await db.seed([record("a")])
+        _ = try await db.share(recordID: "a", type: "Item", title: nil)
+        let access = await db.access(of: "a")
+        XCTAssertEqual(access, .invitedOnly)
+    }
+
+    func testExistingShareWithOtherAccessIsNeverReturnedAsRequested() async throws {
+        let db = MockCloudDatabase()
+        await db.seed([record("a")])
+        _ = try await db.share(recordID: "a", type: "Item", title: nil)
+        do {
+            _ = try await db.share(recordID: "a", type: "Item", title: nil, access: .anyoneWithLink(.readWrite))
+            XCTFail("an invite-only share must not be reported as a public link")
+        } catch {
+            XCTAssertEqual(error as? CloudSyncSharePermissionError, .existingPermissionMismatch)
+        }
+    }
+
+    func testOwnerCannotLeaveAndParticipantCannotRevoke() async throws {
+        let db = MockCloudDatabase()
+        await db.seed([record("mine")])
+        _ = try await db.share(recordID: "mine", type: "Item", title: nil)
+        await db.receiveShare(record("theirs"), from: URL(string: "https://www.icloud.com/share/theirs")!)
+        do { try await db.leaveShare(recordID: "mine", type: "Item"); XCTFail("owner cannot leave") }
+        catch { XCTAssertEqual(error as? ShareError, .recordNotFound) }
+        do { try await db.revokeOwnedShare(recordID: "theirs", type: "Item"); XCTFail("participant cannot revoke") }
+        catch { XCTAssertEqual(error as? ShareError, .recordNotFound) }
     }
 }

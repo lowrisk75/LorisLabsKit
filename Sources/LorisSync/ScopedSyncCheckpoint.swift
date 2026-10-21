@@ -72,6 +72,8 @@ public struct ScopedSyncChanges: Sendable {
     public let deletedIDs: [String]
     public let wasReset: Bool
     public let checkpoint: ScopedSyncCheckpoint
+    /// Unreadable changed records; not deletions (see `ZoneChanges.quarantined`).
+    public let quarantined: [QuarantinedRecord]
 }
 
 extension IncrementalCloudDatabase {
@@ -92,6 +94,7 @@ extension IncrementalCloudDatabase {
         let bound = try ScopedSyncCheckpoint(scope: scope, recordType: type, token: token,
                                             maximumEncodedBytes: maximumCheckpointBytes)
         return ScopedSyncChanges(changed: changes.changed, deletedIDs: changes.deletedIDs,
-                                 wasReset: changes.wasReset, checkpoint: bound)
+                                 wasReset: changes.wasReset, checkpoint: bound,
+                                 quarantined: changes.quarantined)
     }
 }

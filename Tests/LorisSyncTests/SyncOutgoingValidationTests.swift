@@ -51,15 +51,22 @@ struct SyncOutgoingValidationTests {
     }
     @Test func permissionMismatchNeverReturnsAnUnchangedBroaderShareAsRequested() {
         #expect(throws: CloudSyncSharePermissionError.existingPermissionMismatch) {
-            try SyncShareResolution.requirePermission(.readWrite, requested: .readOnly)
+            try SyncShareResolution.requireAccess(.anyoneWithLink(.readWrite), requested: .anyoneWithLink(.readOnly))
         }
         #expect(throws: CloudSyncSharePermissionError.existingPermissionMismatch) {
-            try SyncShareResolution.requirePermission(nil, requested: .readOnly)
+            try SyncShareResolution.requireAccess(nil, requested: .anyoneWithLink(.readOnly))
+        }
+        // A public link never satisfies an invite-only request, and vice versa.
+        #expect(throws: CloudSyncSharePermissionError.existingPermissionMismatch) {
+            try SyncShareResolution.requireAccess(.anyoneWithLink(.readOnly), requested: .invitedOnly)
+        }
+        #expect(throws: CloudSyncSharePermissionError.existingPermissionMismatch) {
+            try SyncShareResolution.requireAccess(.invitedOnly, requested: .anyoneWithLink(.readOnly))
         }
     }
-    @Test(arguments: [SharePermission.readOnly, .readWrite])
-    func equalPermissionIsAccepted(permission: SharePermission) throws {
-        try SyncShareResolution.requirePermission(permission, requested: permission)
+    @Test(arguments: [ShareAccess.invitedOnly, .anyoneWithLink(.readOnly), .anyoneWithLink(.readWrite)])
+    func equalAccessIsAccepted(access: ShareAccess) throws {
+        try SyncShareResolution.requireAccess(access, requested: access)
     }
     private func record(id: String = "fixture", type: String = "Item", fields: [String: SyncValue] = [:]) -> SyncRecord {
         .init(id: id, type: type, fields: fields, modifiedAt: .distantPast)

@@ -56,7 +56,7 @@ enum SyncRecordValidation {
 }
 
 extension SyncShareResolution {
-    static func requirePermission(_ effective: SharePermission?, requested: SharePermission) throws {
+    static func requireAccess(_ effective: ShareAccess?, requested: ShareAccess) throws {
         guard effective == requested else { throw CloudSyncSharePermissionError.existingPermissionMismatch }
     }
 }

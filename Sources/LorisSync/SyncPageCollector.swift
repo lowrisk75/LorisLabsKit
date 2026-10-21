@@ -52,27 +52,42 @@ enum SyncZoneAccumulator {
     static func combine(_ pages: [ZoneChanges], token: Data?, wasReset: Bool) throws -> ZoneChanges {
         var records: [Data: SyncRecord] = [:]
         var deleted: [Data: String] = [:]
+        var quarantined: [Data: QuarantinedRecord] = [:]
         for page in pages {
             let changedIDs = Set(page.changed.map { Data($0.id.utf8) })
             let deletedIDs = Set(page.deletedIDs.map { Data($0.utf8) })
+            let quarantinedIDs = Set(page.quarantined.map { Data($0.id.utf8) })
             guard changedIDs.count == page.changed.count,
                   changedIDs.isDisjoint(with: deletedIDs),
-                  deletedIDs.count == page.deletedIDs.count else {
+                  deletedIDs.count == page.deletedIDs.count,
+                  quarantinedIDs.count == page.quarantined.count,
+                  quarantinedIDs.isDisjoint(with: changedIDs),
+                  quarantinedIDs.isDisjoint(with: deletedIDs) else {
                 throw CloudSyncReadError.conflictingChanges
             }
+            // Each identity keeps only its latest state across pages.
             for record in page.changed {
                 let identity = Data(record.id.utf8)
                 records[identity] = record
                 deleted.removeValue(forKey: identity)
+                quarantined.removeValue(forKey: identity)
             }
             for id in page.deletedIDs {
                 let identity = Data(id.utf8)
                 records.removeValue(forKey: identity)
+                quarantined.removeValue(forKey: identity)
                 deleted[identity] = id
+            }
+            for item in page.quarantined {
+                let identity = Data(item.id.utf8)
+                records.removeValue(forKey: identity)
+                deleted.removeValue(forKey: identity)
+                quarantined[identity] = item
             }
         }
         return ZoneChanges(changed: records.values.sorted { $0.id.utf8.lexicographicallyPrecedes($1.id.utf8) },
                            deletedIDs: deleted.values.sorted { $0.utf8.lexicographicallyPrecedes($1.utf8) },
-                           token: token, wasReset: wasReset)
+                           token: token, wasReset: wasReset,
+                           quarantined: quarantined.values.sorted { $0.id.utf8.lexicographicallyPrecedes($1.id.utf8) })
     }
 }

@@ -19,13 +19,45 @@ public struct CloudKitDatabase: CloudDatabase {
     private let container: CKContainer
     private let zoneID: CKRecordZone.ID
     private let physicalDeletionPolicy: CloudSyncPhysicalDeletionPolicy
+    private let readPolicy: CloudSyncReadPolicy
     private static let modifiedKey = "modifiedAt"
 
     public init(containerIdentifier: String, zoneName: String = "MelaProfilesZone",
-                physicalDeletionPolicy: CloudSyncPhysicalDeletionPolicy = .disabled) {
+                physicalDeletionPolicy: CloudSyncPhysicalDeletionPolicy = .disabled,
+                readPolicy: CloudSyncReadPolicy = .quarantineUnreadable) {
         container = CKContainer(identifier: containerIdentifier)
         zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
         self.physicalDeletionPolicy = physicalDeletionPolicy
+        self.readPolicy = readPolicy
+    }
+
+    /// Strict mapping, or a quarantine entry under `.quarantineUnreadable`.
+    /// Only content-mapping failures are quarantined; transport/permission
+    /// errors always fail the read.
+    enum MappedRecord: Sendable {
+        case record(SyncRecord)
+        case quarantined(QuarantinedRecord)
+    }
+
+    static func mapOrQuarantine(_ record: CKRecord, type: String,
+                                policy: CloudSyncReadPolicy) throws -> MappedRecord {
+        do {
+            return .record(try decodeRecord(record, type: type))
+        } catch CloudSyncReadError.invalidRecord where policy == .quarantineUnreadable
+                    && record.recordType.utf8.elementsEqual(type.utf8) {
+            return .quarantined(QuarantinedRecord(id: record.recordID.recordName, reason: .unsupportedContent))
+        }
+    }
+
+    static func split(_ mapped: [MappedRecord]) -> SyncReadReport {
+        var records: [SyncRecord] = [], quarantined: [QuarantinedRecord] = []
+        for item in mapped {
+            switch item {
+            case .record(let record): records.append(record)
+            case .quarantined(let entry): quarantined.append(entry)
+            }
+        }
+        return SyncReadReport(records: records, quarantined: quarantined)
     }
 
     private var database: CKDatabase { container.privateCloudDatabase }
@@ -91,7 +123,7 @@ public struct CloudKitDatabase: CloudDatabase {
     }
 
     private static func decodeRecord(_ record: CKRecord, type: String) throws -> SyncRecord {
-        guard record.recordType == type,
+        guard record.recordType.utf8.elementsEqual(type.utf8),
               let mapped = SyncRecord(from: record, type: type, modifiedKey: modifiedKey) else {
             throw CloudSyncReadError.invalidRecord
         }
@@ -181,12 +213,14 @@ extension CloudKitDatabase: IncrementalCloudDatabase {
             // Check every Result before filtering types. An error has no trustworthy
             // recordType and must not allow the zone-wide token to advance.
             let modifications = try result.modificationResultsByID.values.map { try $0.get().record }
-            let changed = try modifications.filter { $0.recordType == type }.map {
-                try Self.decodeRecord($0, type: type)
-            }
-            let deletions = result.deletions.filter { $0.recordType == type }.map(\.recordID.recordName)
+            let mapped = Self.split(try modifications.filter { $0.recordType.utf8.elementsEqual(type.utf8) }.map {
+                try Self.mapOrQuarantine($0, type: type, policy: readPolicy)
+            })
+            let deletions = result.deletions.filter { $0.recordType.utf8.elementsEqual(type.utf8) }
+                .map(\.recordID.recordName)
             return SyncResultPage(
-                results: [.success(ZoneChanges(changed: changed, deletedIDs: deletions))],
+                results: [.success(ZoneChanges(changed: mapped.records, deletedIDs: deletions,
+                                               quarantined: mapped.quarantined))],
                 continuation: result.moreComing ? result.changeToken : nil,
                 checkpoint: result.changeToken)
         }
@@ -244,7 +278,7 @@ extension CloudKitDatabase: SharedCloudDatabase {
     private static func lookupRoot(_ id: CKRecord.ID, type: String,
                                    in database: CKDatabase) async throws -> CKRecord? {
         guard let root = try await lookupRecord(id, in: database) else { return nil }
-        guard root.recordType == type else { throw CloudSyncSharingError.recordTypeMismatch }
+        guard root.recordType.utf8.elementsEqual(type.utf8) else { throw CloudSyncSharingError.recordTypeMismatch }
         return root
     }
 
@@ -263,55 +297,127 @@ extension CloudKitDatabase: SharedCloudDatabase {
         switch participant.role {
         case .owner: return .owner
         case .privateUser, .publicUser: return .participant
-        default: return .unknown // New roles require an explicit compatibility decision.
+        default:
+            // OS 26 administrators are non-owner participants who may invite others.
+            if #available(macOS 26.0, iOS 26.0, tvOS 26.0, watchOS 26.0, visionOS 26.0, *),
+               participant.role == .administrator {
+                return .participant
+            }
+            return .unknown // Other new roles require an explicit compatibility decision.
         }
     }
 
     public func share(recordID: String,
                       type: String,
                       title: String?,
-                      permission: SharePermission = .readWrite) async throws -> ShareInfo {
+                      access: ShareAccess) async throws -> ShareInfo {
         try SyncRecordValidation.validateID(recordID)
         try SyncRecordValidation.validateType(type)
         let rootID = CKRecord.ID(recordName: recordID, zoneID: zoneID)
-        guard let root = try await Self.lookupRoot(rootID, type: type, in: database) else {
+        let share = try await Self.ensureShare(rootID: rootID, type: type, title: title,
+                                               access: access, in: database)
+        guard let url = share.url else { throw ShareError.invalidShare }
+        return ShareInfo(url: url, recordID: recordID,
+                         isOwner: try SyncShareResolution.isOwner(role: Self.participantRole(in: share)),
+                         participantCount: share.participants.count)
+    }
+
+    /// Existing owned share with the requested access, or a newly saved one.
+    /// Access and ownership are verified on the acknowledged share.
+    static func ensureShare(rootID: CKRecord.ID, type: String, title: String?,
+                            access: ShareAccess, in database: CKDatabase) async throws -> CKShare {
+        guard let root = try await lookupRoot(rootID, type: type, in: database) else {
             throw ShareError.recordNotFound
         }
-        if let existing = try await Self.readShare(for: root, in: database) {
-            try Self.requirePermission(existing.publicPermission, requested: permission)
-            guard let url = existing.url else { throw ShareError.invalidShare }
-            return ShareInfo(url: url, recordID: recordID,
-                             isOwner: try SyncShareResolution.isOwner(role: Self.participantRole(in: existing)),
-                             participantCount: existing.participants.count)
+        if let existing = try await readShare(for: root, in: database) {
+            try SyncShareResolution.requireAccess(effectiveAccess(existing.publicPermission), requested: access)
+            guard try SyncShareResolution.isOwner(role: participantRole(in: existing)) else {
+                throw ShareError.notOwner
+            }
+            return existing
         }
-
-        let share = CKShare(rootRecord: root)
-        share[CKShare.SystemFieldKey.title] = title as CKRecordValue?
-        share.publicPermission = permission == .readWrite ? .readWrite : .readOnly
-
-        let confirmed = try await Self.modifyRecords(in: database, saving: [root, share], deleting: [])
+        let share = makeShare(root: root, title: title, access: access)
+        let confirmed = try await modifyRecords(in: database, saving: [root, share], deleting: [])
         guard let savedShare = confirmed[share.recordID] as? CKShare,
-              let url = savedShare.url else { throw ShareError.invalidShare }
-        try Self.requirePermission(savedShare.publicPermission, requested: permission)
-        guard try SyncShareResolution.isOwner(role: Self.participantRole(in: savedShare)) else {
+              savedShare.url != nil else { throw ShareError.invalidShare }
+        try SyncShareResolution.requireAccess(effectiveAccess(savedShare.publicPermission), requested: access)
+        guard try SyncShareResolution.isOwner(role: participantRole(in: savedShare)) else {
             throw ShareError.notOwner
         }
-        return ShareInfo(url: url,
-                         recordID: recordID,
-                         isOwner: true,
-                         participantCount: savedShare.participants.count)
+        return savedShare
     }
 
-    private static func requirePermission(_ permission: CKShare.ParticipantPermission,
-                                          requested: SharePermission) throws {
-        let effective: SharePermission?
-        switch permission {
-        case .readOnly: effective = .readOnly
-        case .readWrite: effective = .readWrite
-        default: effective = nil // none/unknown cannot satisfy a requested public grant.
-        }
-        try SyncShareResolution.requirePermission(effective, requested: requested)
+    static func makeShare(root: CKRecord, title: String?, access: ShareAccess) -> CKShare {
+        let share = CKShare(rootRecord: root)
+        share[CKShare.SystemFieldKey.title] = title as CKRecordValue?
+        apply(access, to: share)
+        return share
     }
+
+    static func apply(_ access: ShareAccess, to share: CKShare) {
+        switch access {
+        case .invitedOnly: share.publicPermission = .none
+        case .anyoneWithLink(.readOnly): share.publicPermission = .readOnly
+        case .anyoneWithLink(.readWrite): share.publicPermission = .readWrite
+        }
+    }
+
+    /// Owner: change who may join an existing share (e.g. migrate a legacy
+    /// public link to `.invitedOnly`) without revoking it. Compare-and-set on
+    /// the share; the acknowledged access is verified. CloudKit decides what
+    /// happens to people who already joined through the link (not verified here).
+    public func updateShareAccess(recordID: String, type: String,
+                                  access: ShareAccess) async throws -> ShareInfo {
+        try SyncRecordValidation.validateID(recordID)
+        try SyncRecordValidation.validateType(type)
+        let rootID = CKRecord.ID(recordName: recordID, zoneID: zoneID)
+        guard let root = try await Self.lookupRoot(rootID, type: type, in: database),
+              let share = try await Self.readShare(for: root, in: database) else {
+            throw ShareError.recordNotFound
+        }
+        guard try SyncShareResolution.isOwner(role: Self.participantRole(in: share)) else {
+            throw ShareError.notOwner
+        }
+        var current = share
+        if Self.effectiveAccess(share.publicPermission) != access {
+            Self.apply(access, to: share)
+            let confirmed = try await Self.modifyRecords(in: database, saving: [share], deleting: [],
+                                                         savePolicy: .ifServerRecordUnchanged)
+            guard let saved = confirmed[share.recordID] as? CKShare else { throw ShareError.invalidShare }
+            current = saved
+        }
+        try SyncShareResolution.requireAccess(Self.effectiveAccess(current.publicPermission), requested: access)
+        guard let url = current.url else { throw ShareError.invalidShare }
+        return ShareInfo(url: url, recordID: recordID, isOwner: true,
+                         participantCount: current.participants.count)
+    }
+
+    static func effectiveAccess(_ permission: CKShare.ParticipantPermission) -> ShareAccess? {
+        switch permission {
+        case .none: return .invitedOnly
+        case .readOnly: return .anyoneWithLink(.readOnly)
+        case .readWrite: return .anyoneWithLink(.readWrite)
+        default: return nil // unknown never satisfies a request.
+        }
+    }
+
+    /// Validated existing owned share, `nil` when the root has none yet.
+    static func existingOwnedShare(rootID: CKRecord.ID, type: String, access: ShareAccess,
+                                   in database: CKDatabase) async throws -> CKShare? {
+        guard let root = try await lookupRoot(rootID, type: type, in: database) else {
+            throw ShareError.recordNotFound
+        }
+        guard let existing = try await readShare(for: root, in: database) else { return nil }
+        try SyncShareResolution.requireAccess(effectiveAccess(existing.publicPermission), requested: access)
+        guard try SyncShareResolution.isOwner(role: participantRole(in: existing)) else {
+            throw ShareError.notOwner
+        }
+        return existing
+    }
+
+    var shareContainer: CKContainer { container }
+    var shareZoneID: CKRecordZone.ID { zoneID }
+    var sharePrivateDatabase: CKDatabase { database }
 
     public func existingShare(recordID: String, type: String) async throws -> ShareInfo? {
         try SyncRecordValidation.validateID(recordID)
@@ -362,10 +468,43 @@ extension CloudKitDatabase: SharedCloudDatabase {
             out.append(contentsOf: records)
         }
         // This API cannot represent zone/owner-qualified IDs. Do not conflate them.
-        try SyncShareResolution.ensureUniqueIDs(out.map(\.id))
-        return out.sorted { $0.id < $1.id }
+        // Byte identity: canonically equivalent but distinct IDs are not one record.
+        try SyncShareResolution.ensureUniqueIDs(out.map { Data($0.id.utf8) })
+        return out.sorted { $0.id.utf8.lexicographicallyPrecedes($1.id.utf8) }
     }
 
+    public func fetchSharedReport(type: String) async throws -> SyncReadReport {
+        try SyncRecordValidation.validateType(type)
+        let zones = try await sharedDatabase.allRecordZones()
+        let query = CKQuery(recordType: type, predicate: NSPredicate(value: true))
+        let database = sharedDatabase, policy = readPolicy
+        var mapped: [MappedRecord] = []
+        for zone in zones {
+            let zoneID = zone.zoneID
+            let collected = try await SyncPageCollector.collect { (cursor: CKQueryOperation.Cursor?) in
+                let page: (matchResults: [(CKRecord.ID, Result<CKRecord, any Error>)],
+                           queryCursor: CKQueryOperation.Cursor?)
+                if let cursor {
+                    page = try await database.records(continuingMatchFrom: cursor)
+                } else {
+                    page = try await database.records(matching: query, inZoneWith: zoneID)
+                }
+                return SyncResultPage(results: page.matchResults.map { _, result in
+                    result.flatMap { record in Result { try Self.mapOrQuarantine(record, type: type, policy: policy) } }
+                }, continuation: page.queryCursor)
+            }
+            mapped.append(contentsOf: collected.values)
+        }
+        let report = Self.split(mapped)
+        try SyncShareResolution.ensureUniqueIDs(
+            (report.records.map(\.id) + report.quarantined.map(\.id)).map { Data($0.utf8) })
+        return SyncReadReport(
+            records: report.records.sorted { $0.id.utf8.lexicographicallyPrecedes($1.id.utf8) },
+            quarantined: report.quarantined.sorted { $0.id.utf8.lexicographicallyPrecedes($1.id.utf8) })
+    }
+
+    /// Legacy string-only API: refuses (`ambiguousRecord`) when the name exists both
+    /// privately and in a shared zone. Prefer `revokeOwnedShare` / `leaveShare`.
     public func stopSharing(recordID: String, type: String) async throws {
         try SyncRecordValidation.validateID(recordID)
         try SyncRecordValidation.validateType(type)
@@ -377,16 +516,178 @@ extension CloudKitDatabase: SharedCloudDatabase {
                 try await Self.lookupRoot(CKRecord.ID(recordName: recordID, zoneID: zone),
                                           type: type, in: sharedDatabase)
             },
-            remove: { candidate in
-                let target = candidate.scope == .privateDatabase ? database : sharedDatabase
-                guard let share = try await Self.readShare(for: candidate.root, in: target) else {
-                    throw ShareError.recordNotFound
+            remove: removeShare)
+    }
+
+    /// Owner: revoke the share of a record in this database's private zone for
+    /// everyone. Never looks at shared zones, so a colliding name a participant
+    /// planted there cannot block revocation. Throws `notOwner` otherwise.
+    public func revokeOwnedShare(recordID: String, type: String) async throws {
+        try SyncRecordValidation.validateID(recordID)
+        try SyncRecordValidation.validateType(type)
+        let rootID = CKRecord.ID(recordName: recordID, zoneID: zoneID)
+        try await SyncShareResolution.removeOwned(
+            privateRoot: { try await Self.lookupRoot(rootID, type: type, in: database) },
+            remove: removeShare)
+    }
+
+    /// Participant: leave a share accepted from someone else. Never touches the
+    /// caller's own private records. Same-name roots in several shared zones
+    /// still fail closed with `ambiguousRecord`.
+    public func leaveShare(recordID: String, type: String) async throws {
+        try SyncRecordValidation.validateID(recordID)
+        try SyncRecordValidation.validateType(type)
+        try await SyncShareResolution.removeParticipating(
+            sharedZones: { try await sharedDatabase.allRecordZones().map(\.zoneID) },
+            sharedRoot: { zone in
+                try await Self.lookupRoot(CKRecord.ID(recordName: recordID, zoneID: zone),
+                                          type: type, in: sharedDatabase)
+            },
+            remove: removeShare)
+    }
+
+    private var removeShare: @Sendable (SyncShareCandidate<CKRecord>) async throws -> Void {
+        { [database, sharedDatabase] candidate in
+            let target = candidate.scope == .privateDatabase ? database : sharedDatabase
+            guard let share = try await Self.readShare(for: candidate.root, in: target) else {
+                throw ShareError.recordNotFound
+            }
+            try SyncShareResolution.requireRemovalRole(
+                scope: candidate.scope, role: Self.participantRole(in: share),
+                accepted: share.currentUserParticipant?.acceptanceStatus == .accepted)
+            _ = try await Self.modifyRecords(in: target, saving: [], deleting: [share.recordID])
+        }
+    }
+}
+
+// MARK: - Server compare-and-set
+
+extension CloudKitDatabase: VersionedCloudDatabase {
+    public func fetchVersioned(type: String, id: String) async throws -> VersionedLookup {
+        try SyncRecordValidation.validateType(type)
+        try SyncRecordValidation.validateID(id)
+        try Task.checkCancellation()
+        try await ensureZone()
+        // Fetch by ID is strongly consistent, unlike index-backed queries.
+        let recordID = CKRecord.ID(recordName: id, zoneID: zoneID)
+        guard let native = try await Self.lookupRecord(recordID, in: database) else { return .missing }
+        guard native.recordType.utf8.elementsEqual(type.utf8) else { throw CloudSyncReadError.invalidRecord }
+        let version = try Self.version(of: native)
+        switch try Self.mapOrQuarantine(native, type: type, policy: .quarantineUnreadable) {
+        case .record(let record): return .found(VersionedSyncRecord(record: record, version: version))
+        case .quarantined: return .unreadable(version)
+        }
+    }
+
+    public func fetchVersioned(type: String) async throws -> [VersionedSyncRecord] {
+        try SyncRecordValidation.validateType(type)
+        try await ensureZone()
+        let query = CKQuery(recordType: type, predicate: NSPredicate(value: true))
+        let zoneID = zoneID, database = database
+        let collected = try await SyncPageCollector.collect { (cursor: CKQueryOperation.Cursor?) in
+            let page: (matchResults: [(CKRecord.ID, Result<CKRecord, any Error>)],
+                       queryCursor: CKQueryOperation.Cursor?)
+            if let cursor {
+                page = try await database.records(continuingMatchFrom: cursor)
+            } else {
+                page = try await database.records(matching: query, inZoneWith: zoneID)
+            }
+            return SyncResultPage(results: page.matchResults.map { _, result in
+                result.flatMap { record in Result { try Self.versioned(record, type: type) } }
+            }, continuation: page.queryCursor)
+        }
+        try SyncShareResolution.ensureUniqueIDs(collected.values.map { Data($0.record.id.utf8) })
+        return collected.values
+    }
+
+    public func save(_ record: SyncRecord, expecting version: SyncRecordVersion?,
+                     replacingAllFields: Bool) async throws -> SyncRecordVersion {
+        try Task.checkCancellation()
+        try SyncRecordValidation.validate([record])
+        let recordID = CKRecord.ID(recordName: record.id, zoneID: zoneID)
+        let native: CKRecord
+        if let version {
+            guard version.identity.elementsEqual(record.id.utf8) else { throw CloudSyncValidationError.invalidRecord }
+            let base = try Self.decodeVersion(version)
+            guard base.recordID == recordID,
+                  base.recordType.utf8.elementsEqual(record.type.utf8) else {
+                throw CloudSyncValidationError.invalidRecord
+            }
+            if replacingAllFields {
+                // Full replacement needs the server's key set: read the record and
+                // require it to still be exactly the expected version.
+                try await ensureZone()
+                guard let server = try await Self.lookupRecord(recordID, in: database) else {
+                    throw CloudSyncConflictError.serverRecordChanged(current: nil)
                 }
-                try SyncShareResolution.requireRemovalRole(
-                    scope: candidate.scope, role: Self.participantRole(in: share),
-                    accepted: share.currentUserParticipant?.acceptanceStatus == .accepted)
-                _ = try await Self.modifyRecords(in: target, saving: [], deleting: [share.recordID])
-            })
+                guard let tag = server.recordChangeTag, Data(tag.utf8) == version.tag else {
+                    throw CloudSyncConflictError.serverRecordChanged(
+                        current: try? Self.versioned(server, type: record.type))
+                }
+                for key in server.allKeys() where key != Self.modifiedKey && record.fields[key] == nil {
+                    server[key] = nil
+                }
+                native = server
+            } else {
+                // Only provided fields are sent; unknown server fields are preserved.
+                native = base
+            }
+        } else {
+            native = CKRecord(recordType: record.type, recordID: recordID)
+        }
+        record.apply(to: native, modifiedKey: Self.modifiedKey)
+        try await ensureZone()
+        do {
+            let confirmed = try await Self.modifyRecords(in: database, saving: [native], deleting: [],
+                                                         savePolicy: .ifServerRecordUnchanged)
+            guard let saved = confirmed[recordID] else { throw CloudSyncWriteError.incompleteAcknowledgement }
+            return try Self.version(of: saved)
+        } catch let error as CKError where error.code == .serverRecordChanged {
+            // Unreadable server copies are reported without content, never guessed.
+            let current = error.serverRecord.flatMap { try? Self.versioned($0, type: record.type) }
+            throw CloudSyncConflictError.serverRecordChanged(current: current)
+        }
+    }
+
+    static func versioned(_ record: CKRecord, type: String) throws -> VersionedSyncRecord {
+        VersionedSyncRecord(record: try decodeRecord(record, type: type), version: try version(of: record))
+    }
+
+    static func version(of record: CKRecord) throws -> SyncRecordVersion {
+        // Compare-and-set does not support hierarchies: refuse at read time so a
+        // record is never "found" and then impossible to save.
+        guard record.parent == nil else { throw CloudSyncValidationError.invalidRecord }
+        guard let tag = record.recordChangeTag, !tag.isEmpty,
+              tag.utf8.count <= SyncRecordVersion.maximumTagBytes else { throw CloudSyncReadError.invalidRecord }
+        let coder = NSKeyedArchiver(requiringSecureCoding: true)
+        record.encodeSystemFields(with: coder)
+        coder.finishEncoding()
+        let token = coder.encodedData
+        guard !token.isEmpty, token.count <= SyncRecordVersion.maximumTokenBytes else {
+            throw CloudSyncReadError.invalidRecord
+        }
+        return SyncRecordVersion(identity: Data(record.recordID.recordName.utf8), tag: Data(tag.utf8),
+                                 token: token, serverModifiedAt: record.modificationDate)
+    }
+
+    /// Rebuilds the system-fields record. A stored version is host data: it must
+    /// live in protected storage. Decoding uses secure coding; the result must
+    /// match the version's identity and tag and carry no parent reference (this
+    /// adapter never writes hierarchies, so a parent would be injected).
+    static func decodeVersion(_ version: SyncRecordVersion) throws -> CKRecord {
+        guard version.token.count <= SyncRecordVersion.maximumTokenBytes,
+              let coder = try? NSKeyedUnarchiver(forReadingFrom: version.token) else {
+            throw CloudSyncReadError.invalidRecord
+        }
+        coder.requiresSecureCoding = true
+        defer { coder.finishDecoding() }
+        guard let record = CKRecord(coder: coder),
+              let tag = record.recordChangeTag, Data(tag.utf8) == version.tag,
+              record.recordID.recordName.utf8.elementsEqual(version.identity),
+              record.parent == nil else {
+            throw CloudSyncReadError.invalidRecord
+        }
+        return record
     }
 }
 #endif

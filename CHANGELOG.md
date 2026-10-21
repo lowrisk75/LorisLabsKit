@@ -2,6 +2,19 @@
 
 All notable changes to LorisLabsKit are documented here.
 
+## Unreleased — Sync integrity closure, 2026-10-21
+
+- **Behaviour change:** physical data deletion is disabled by default (`CloudSyncPhysicalDeletionPolicy.disabled`, error `physicalDeletionDisabled`, checked before any native/provider call). The earlier preflight requires explicit `.allowNonAtomicPreflight` and remains non-atomic. `stopSharing` is unaffected.
+- `CloudSyncEngine`: one whole operation at a time per instance; overlap throws `CloudSyncOperationError.operationInProgress` without queueing or replay. Single-profile checks add `CloudSyncPayloadError` (`invalidRecord`, `inconsistentIdentity`, `ambiguousProfiles`).
+- Byte-exact UTF-8 identity keys in page collection; outgoing validation (`CloudSyncValidationError.invalidRecord`) for IDs, ASCII type/field-name subset, reserved fields and non-finite values; existing/acknowledged share permission mismatch throws `CloudSyncSharePermissionError.existingPermissionMismatch`.
+- Additive `ScopedSyncCheckpoint` and `fetchScopedChanges`: versioned, size-bounded, host-verified scope binding. Not account authentication, encryption or rollback protection; raw `IncrementalSync` tokens unchanged.
+- Final-review follow-ups: additive `CloudKitDatabase.revokeOwnedShare` (private only, cannot be blocked by a colliding shared root) and `leaveShare` (shared only); byte-exact `fetchShared` uniqueness/order and record-type checks; non-finite `localModifiedAt` rejected; `ShareInfo`/`SyncRecord` and outbox/checkpoint types redact description and reflection. Open: public-link-only sharing with `readWrite` default; participant LWW pinning and unreadable-record DoS.
+- **SOTA decisions (behaviour/API changes):** invite-only sharing by default (`ShareAccess`, `SyncShareItem` for SwiftUI `ShareLink`, opt-in OS 26 `SyncShareOptions`, administrator role recognised; `share(…permission:)` and `stopSharing` deprecated; `revokeOwnedShare`/`leaveShare`/`fetchSharedReport` added to `SharedCloudDatabase`). Server compare-and-set: `VersionedCloudDatabase`, `SyncRecordVersion`, `CloudSyncConflictError`, clock-free `CloudSyncEngine.synchronize` (legacy `reconcile` deprecated). Unreadable-record quarantine by default (`CloudSyncReadPolicy`, `ZoneChanges.quarantined`), so one bad record no longer stalls a type.
+- Review hardening: `synchronize` reads by ID when the record is known (strongly consistent; a planted second record can no longer block it), new `remoteUnreadable` outcome with CAS repair path, `SyncRecordVersion` binds the record ID, versioned saves preserve fields they do not send, forged versions with a `parent` are rejected, `updateShareAccess` migrates legacy public shares, `SyncShareItem` redacted, `push` deprecated.
+- **Source-breaking:** `SharedCloudDatabase.share(…permission:)` requirement replaced by `share(…access:)`; new requirements without defaults (`revokeOwnedShare`, `leaveShare`, `fetchSharedReport`, `updateShareAccess`, `VersionedCloudDatabase.fetchVersioned(type:id:)`). Update external conformers.
+- Final delta review fixes: first sync refuses a second profile under another ID; undecodable payloads return `remoteUnreadable`; `save(_:expecting:replacingAllFields:)` (full replacement clears fields; used by repair); records with `parent` refused at read.
+- 191 targeted LorisSync methods pass in Debug and Release (29 XCTest + 162 Swift Testing); generic iOS/tvOS/watchOS/visionOS Simulator builds succeed; whole package builds. No provider/device/release qualification, no app migration. See [Documentation/SYNC-CLOSURE.md](Documentation/SYNC-CLOSURE.md).
+
 ## Unreleased — Sync deletion preflight, 2026-10-20
 
 - Read/verify every private deletion target before one batch dispatch; refuse mismatched identities/exact-UTF8 types, blank types and incomplete/failed lookups without deleting a prefix. Propagate provider errors, retain exact ACK checking and no replay/false late rollback.

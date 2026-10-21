@@ -79,6 +79,34 @@ enum SyncShareResolution {
         try await remove(candidate)
     }
 
+    /// Owner revocation: private database only. A same-name root in any shared
+    /// zone (possibly planted by a participant) cannot block it.
+    static func removeOwned<Root: Sendable>(
+        privateRoot: @Sendable () async throws -> Root?,
+        remove: @Sendable (SyncShareCandidate<Root>) async throws -> Void
+    ) async throws {
+        try Task.checkCancellation()
+        guard let root = try await privateRoot() else { throw ShareError.recordNotFound }
+        try Task.checkCancellation()
+        try await remove(SyncShareCandidate(scope: .privateDatabase, root: root))
+    }
+
+    /// Participant leave: shared zones only; the caller's own private records are
+    /// never considered. Same-name roots across shared zones still fail closed.
+    static func removeParticipating<Root: Sendable, Zone: Hashable & Sendable>(
+        maxZones: Int = 1_000,
+        sharedZones: @Sendable () async throws -> [Zone],
+        sharedRoot: @Sendable (Zone) async throws -> Root?,
+        remove: @Sendable (SyncShareCandidate<Root>) async throws -> Void
+    ) async throws {
+        guard let candidate = try await unique(
+            maxZones: maxZones, privateRoot: { nil },
+            sharedZones: sharedZones, sharedRoot: sharedRoot
+        ) else { throw ShareError.recordNotFound }
+        try Task.checkCancellation()
+        try await remove(candidate)
+    }
+
     static func isOwner(role: SyncShareRole) throws -> Bool {
         switch role {
         case .owner: return true

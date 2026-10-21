@@ -13,18 +13,65 @@ public struct ZoneChanges: Sendable, Equatable {
     /// Token to persist and pass to the next call. `nil` means "start over".
     public var token: Data?
     /// `true` when the server rejected the token as expired and this payload is a
-    /// full snapshot rather than a delta. Callers must treat `changed` as the whole
-    /// truth and not merge it into stale local state.
+    /// full snapshot rather than a delta. Callers must treat `changed` PLUS
+    /// `quarantined` as the whole truth: never delete local copies of
+    /// quarantined IDs, and never merge the snapshot into stale local state.
     public var wasReset: Bool
+    /// Records that changed but could not be mapped (unsupported/malformed
+    /// content, e.g. written by a newer app version). They are NOT deletions:
+    /// keep any local copy and flag it. Reported once: the checkpoint advances,
+    /// so persist this list (or refetch from scratch) to keep track of them.
+    /// Always empty under `CloudSyncReadPolicy.strict` (the read throws instead).
+    public var quarantined: [QuarantinedRecord]
 
     public init(changed: [SyncRecord] = [],
                 deletedIDs: [String] = [],
                 token: Data? = nil,
-                wasReset: Bool = false) {
+                wasReset: Bool = false,
+                quarantined: [QuarantinedRecord] = []) {
         self.changed = changed
         self.deletedIDs = deletedIDs
         self.token = token
         self.wasReset = wasReset
+        self.quarantined = quarantined
+    }
+}
+
+/// How a read treats a record whose content cannot be mapped.
+public enum CloudSyncReadPolicy: Sendable, Equatable {
+    /// Default. Deliver valid records, report unreadable ones in `quarantined`
+    /// and advance the checkpoint, so one bad record cannot stall the type.
+    case quarantineUnreadable
+    /// Any unreadable record fails the whole read; the checkpoint never advances.
+    case strict
+}
+
+/// A changed record that could not be mapped. Carries no content.
+public struct QuarantinedRecord: Sendable, Equatable, CustomStringConvertible,
+                                 CustomDebugStringConvertible, CustomReflectable {
+    public enum Reason: Sendable, Equatable {
+        /// Unsupported field type, missing/invalid `modifiedAt`, or other content
+        /// this adapter refuses to map partially.
+        case unsupportedContent
+    }
+    public let id: String
+    public let reason: Reason
+    public init(id: String, reason: Reason) {
+        self.id = id
+        self.reason = reason
+    }
+    public var description: String { "QuarantinedRecord(<redacted>, \(reason))" }
+    public var debugDescription: String { description }
+    public var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
+/// Complete read with explicit quarantine.
+public struct SyncReadReport: Sendable, Equatable {
+    public let records: [SyncRecord]
+    public let quarantined: [QuarantinedRecord]
+    public init(records: [SyncRecord], quarantined: [QuarantinedRecord]) {
+        self.records = records
+        self.quarantined = quarantined
     }
 }
 

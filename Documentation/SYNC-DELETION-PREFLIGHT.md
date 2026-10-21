@@ -1,5 +1,7 @@
 # LorisSync — précontrôle des suppressions / deletion preflight
 
+> **Défaut remplacé le 2026-10-21 / Default superseded on 2026-10-21.** La suppression physique est désormais bloquée par défaut ; ce préflight ne s'applique qu'avec `.allowNonAtomicPreflight`. Physical deletion is now disabled by default; this preflight applies only with `.allowNonAtomicPreflight`. Voir / see [SYNC-CLOSURE.md](SYNC-CLOSURE.md). Le texte ci-dessous est conservé tel qu'au 2026-10-20 / The text below is kept as of 2026-10-20.
+
 ## Français
 
 CloudKitDatabase.delete(ids:type:) ne transmet plus aveuglément les IDs. Avant toute mutation, le helper interne valide la requête puis lit chaque record ; identité retournée et type UTF-8 exact doivent correspondre. Tout échec de lecture, identité/type incohérent ou annulation avant envoi empêche le lot entier de partir : aucun préfixe validé n'est supprimé. Requête vide : aucune lecture/mutation ; doublons/type blanc : erreur. Erreurs spécifiques : CloudSyncDeletionError.recordTypeMismatch et inconsistentIdentity. Les erreurs fournisseur restent propagées, y compris unknownItem : aucune absence transformée en succès.

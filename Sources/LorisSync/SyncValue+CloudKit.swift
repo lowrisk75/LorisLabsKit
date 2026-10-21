@@ -79,7 +79,7 @@ extension SyncRecord {
     /// All-or-error mapping: never return a partial record that could later erase
     /// omitted fields when saved with allKeys. Rich native fields need an adapter.
     init?(from record: CKRecord, type: String, modifiedKey: String) {
-        guard record.recordType == type,
+        guard record.recordType.utf8.elementsEqual(type.utf8),
               let modified = record[modifiedKey] as? Date else { return nil }
 
         var fields: [String: SyncValue] = [:]

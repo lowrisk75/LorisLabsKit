@@ -8,7 +8,11 @@ Latest recorded version: **0.8.0** (local engagement changes are unreleased) —
 
 ## What's inside
 
-### Deletion preflight (local, unreleased; not atomic CAS)
+### Sync integrity closure (local, unreleased)
+
+**Behaviour change:** `CloudKitDatabase` now refuses physical data deletion by default (`CloudSyncDeletionError.physicalDeletionDisabled`); the non-atomic preflight below requires an explicit `.allowNonAtomicPreflight`. `CloudSyncEngine` rejects overlapping operations with `operationInProgress` (no queue). Also: outgoing record validation (ASCII name subset, reserved fields, finite values), byte-exact identities, single-profile checks, existing-share permission mismatch errors and an additive host-scoped `ScopedSyncCheckpoint`, which is not account authentication. Sharing is invite-only by default (add people with `SyncShareItem` + SwiftUI `ShareLink`; public links are opt-in); prefer `revokeOwnedShare` / `leaveShare`. Use `synchronize` (server compare-and-set, explicit conflicts) instead of clock-based `reconcile`. Unreadable records are quarantined instead of stalling sync. See [FR/EN contract and limits](Documentation/SYNC-CLOSURE.md).
+
+### Deletion preflight (local, unreleased; not atomic CAS; opt-in since the closure)
 
 Private deletion now validates every requested record's identity/type before one mutation batch. Lookup/type errors prevent all dispatch. Concurrent replacement and provider/cascade gates remain open: this is not atomic typed deletion. See [FR/EN contract](Documentation/SYNC-DELETION-PREFLIGHT.md).
 
