@@ -98,14 +98,9 @@ struct ShareSheet: View {
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
             if let url = items.first as? URL {
-                #if os(watchOS) || os(tvOS)
-                Text(url.lastPathComponent)
-                    .font(.caption)
-                #else
                 Text(url.lastPathComponent)
                     .font(.caption)
                     .textSelection(.enabled)
-                #endif
             }
         }
         .padding()

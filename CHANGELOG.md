@@ -6,6 +6,18 @@ All notable changes to LorisLabsKit are documented here.
 
 _Nothing yet._
 
+## [0.10.1] — 2026-10-21
+
+### Fixed (final independent review of 0.10.0)
+
+- LorisSync `synchronize`: a never-synced device no longer stalls when the existing profile is unreadable. New `VersionedCloudDatabase.discoverVersionedIDs(type:)` (default implementation provided; CloudKit lists system fields only) feeds discovery, so the profile is reported as `remoteUnreadable` and can be repaired.
+- A payload whose ID differs from its record stays an integrity error (`inconsistentIdentity`) instead of being reported as unreadable.
+- Overwriting an undecodable payload with `base: remoteVersion` is now the documented full replacement.
+- LorisFoundation dependency narrowed to `.upToNextMinor(from: "0.2.0")` (0.x minors may break).
+- CI: token step runs after the third-party Xcode action, which is pinned by commit SHA; checkout no longer persists credentials.
+- Clarification of 0.10.0: LorisFoundation is a private repository, so the package resolves only for accounts with access to it (and in CI once `FOUNDATION_READ_TOKEN` is configured). On tvOS/watchOS, LorisReports exposes its models, transport and redaction but no screens, Foundation Models features or UIKit theme colours.
+- Full suite: 271 tests pass in Debug and Release (29 XCTest + 242 Swift Testing); generic iOS/tvOS/watchOS/visionOS builds of every target succeed.
+
 ## [0.10.0] — 2026-10-21
 
 **Breaking:** LorisSync sharing is invite-only by default and several protocols gained requirements (see Sync integrity closure below and `Documentation/SYNC-CLOSURE.md`). Requires LorisFoundation 0.2.0.

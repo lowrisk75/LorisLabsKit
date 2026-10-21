@@ -88,6 +88,11 @@ actor MockCloudDatabase: IncrementalCloudDatabase, SharedCloudDatabase, Versione
         }
     }
 
+    func discoverVersionedIDs(type: String) async throws -> [String] {
+        guard status == .available else { throw SyncError.accountUnavailable }
+        return records.values.filter { $0.type == type }.map(\.id).sorted()
+    }
+
     func fetchVersioned(type: String, id: String) async throws -> VersionedLookup {
         guard status == .available else { throw SyncError.accountUnavailable }
         guard let record = records[id] else { return .missing }

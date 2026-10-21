@@ -268,6 +268,56 @@ struct SyncVersioningTests {
         #expect(try await db.fetchAll(type: "T").first?.fields["note"] == nil)
     }
 
+    @Test func freshDeviceFindsAndRepairsAnUnreadableProfile() async throws {
+        let db = MockCloudDatabase()
+        await db.seed([try record(Profile(id: "p", name: "Newer"), at: .distantPast)])
+        await db.markUnreadable("p")
+        let engine = CloudSyncEngine<Profile>(database: db)
+        // Never synced (no base): discovery must not throw on unreadable content.
+        guard case .remoteUnreadable(let version) = try await engine.synchronize(
+            local: Profile(id: "p", name: "Mine"), base: nil, hasLocalChanges: true) else {
+            Issue.record("a fresh device must be told the profile is unreadable"); return
+        }
+        guard case .pushed = try await engine.synchronize(
+            local: Profile(id: "p", name: "Mine"), base: version, hasLocalChanges: true) else {
+            Issue.record("deliberate repair must succeed"); return
+        }
+        // No local copy and no base: discovery + by-ID read, also tolerant.
+        await db.markUnreadable("p")
+        guard case .remoteUnreadable = try await engine.synchronize(local: nil, base: nil, hasLocalChanges: false) else {
+            Issue.record("discovery without a local copy must report unreadable"); return
+        }
+    }
+
+    @Test func payloadIdentityMismatchStaysAnIntegrityError() async throws {
+        let db = MockCloudDatabase()
+        // Record "p" whose payload claims to be "q".
+        await db.seed([SyncRecord(id: "p", type: Profile.recordType,
+                                  blob: try JSONEncoder().encode(Profile(id: "q", name: "x")), modifiedAt: .distantPast)])
+        let engine = CloudSyncEngine<Profile>(database: db)
+        await #expect(throws: CloudSyncPayloadError.inconsistentIdentity) {
+            _ = try await engine.synchronize(local: Profile(id: "p", name: "Mine"), base: nil, hasLocalChanges: false)
+        }
+    }
+
+    @Test func overwritingAnUndecodablePayloadIsAFullReplacement() async throws {
+        let db = MockCloudDatabase()
+        var newer = SyncRecord(id: "p", type: Profile.recordType, blob: Data("{\"v\":2}".utf8), modifiedAt: .distantPast)
+        newer.fields["extra"] = .string("from newer app")
+        await db.seed([newer])
+        let engine = CloudSyncEngine<Profile>(database: db)
+        guard case .remoteUnreadable(let version) = try await engine.synchronize(
+            local: Profile(id: "p", name: "Mine"), base: nil, hasLocalChanges: true) else {
+            Issue.record("expected unreadable"); return
+        }
+        guard case .pushed = try await engine.synchronize(
+            local: Profile(id: "p", name: "Mine"), base: version, hasLocalChanges: true) else {
+            Issue.record("repair must succeed"); return
+        }
+        #expect(try await db.fetchAll(type: Profile.recordType).first?.fields["extra"] == nil)
+        #expect(try await stored(in: db) == Profile(id: "p", name: "Mine"))
+    }
+
     #if canImport(CloudKit)
     @Test func nativeVersionDecodingRejectsForgedOrUntaggedArchivesWithoutCrashing() throws {
         let id = CKRecord.ID(recordName: "p", zoneID: CKRecordZone.ID(zoneName: "Z", ownerName: CKCurrentUserDefaultName))

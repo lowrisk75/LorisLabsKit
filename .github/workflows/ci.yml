@@ -12,7 +12,17 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
+      # LorisSync uses OS 26 SDK APIs (sharing options, administrator role):
+      # build with the newest stable Xcode on the runner, never a pinned old one.
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
+        with:
+          xcode-version: latest-stable
+
+      # Runs after third-party actions so they never see the token.
       # LorisFoundation is a private repository. FOUNDATION_READ_TOKEN is a
       # fine-grained token with read-only Contents access to that repo only.
       - name: Authorize private LorisFoundation dependency
@@ -26,13 +36,6 @@ jobs:
           git config --global \
             url."https://x-access-token:${FOUNDATION_READ_TOKEN}@github.com/lowrisk75/LorisFoundation".insteadOf \
             "https://github.com/lowrisk75/LorisFoundation"
-
-      # LorisSync uses OS 26 SDK APIs (sharing options, administrator role):
-      # build with the newest stable Xcode on the runner, never a pinned old one.
-      - name: Select latest stable Xcode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest-stable
 
       - name: Swift version
         run: swift --version

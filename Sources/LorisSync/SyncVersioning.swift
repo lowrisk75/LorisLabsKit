@@ -85,6 +85,9 @@ public protocol VersionedCloudDatabase: CloudDatabase {
     func fetchVersioned(type: String) async throws -> [VersionedSyncRecord]
     /// Strongly consistent read of one record by ID.
     func fetchVersioned(type: String, id: String) async throws -> VersionedLookup
+    /// Discovery of record IDs only, tolerant of unreadable content (so a
+    /// record written by a newer client can still be found and repaired).
+    func discoverVersionedIDs(type: String) async throws -> [String]
     /// Write the record only if the server version still equals `expecting`
     /// (`nil` = create only; fails if the record already exists). Provided
     /// fields replace server values. With `replacingAllFields: false` fields not
@@ -97,6 +100,12 @@ public protocol VersionedCloudDatabase: CloudDatabase {
 }
 
 extension VersionedCloudDatabase {
+    /// Default discovery: strict listing. Adapters should override with an
+    /// ID-only query that tolerates unreadable content.
+    public func discoverVersionedIDs(type: String) async throws -> [String] {
+        try await fetchVersioned(type: type).map(\.record.id)
+    }
+
     /// Compare-and-set save that preserves fields not provided.
     public func save(_ record: SyncRecord, expecting version: SyncRecordVersion?) async throws -> SyncRecordVersion {
         try await save(record, expecting: version, replacingAllFields: false)
@@ -125,8 +134,8 @@ public enum VersionedReconciliation<P: SyncablePayload>: Sendable {
     /// written by a newer client, unsupported fields, or an undecodable
     /// payload). Nothing was written. To deliberately overwrite it (losing the
     /// unreadable content), synchronize with `base: remoteVersion,
-    /// hasLocalChanges: true`: a compare-and-set full replacement. Never store
-    /// this version as the routine base of the local copy.
+    /// hasLocalChanges: true`: a compare-and-set full replacement. Keep this
+    /// version only for that deliberate repair, not as the base of normal edits.
     case remoteUnreadable(remoteVersion: SyncRecordVersion)
 }
 
@@ -160,9 +169,9 @@ extension CloudSyncEngine {
             if base == nil {
                 // Never synced: refuse to create a second profile beside one
                 // another device already created under a different ID.
-                let existing = try await versioned.fetchVersioned(type: P.recordType)
+                let existing = try await versioned.discoverVersionedIDs(type: P.recordType)
                 guard existing.count <= 1 else { throw CloudSyncPayloadError.ambiguousProfiles }
-                if let other = existing.first, !other.record.id.utf8.elementsEqual(id.utf8) {
+                if let other = existing.first, !other.utf8.elementsEqual(id.utf8) {
                     throw CloudSyncPayloadError.inconsistentIdentity
                 }
                 try Task.checkCancellation()
@@ -173,10 +182,18 @@ extension CloudSyncEngine {
                 throw CloudSyncPayloadError.inconsistentIdentity
             }
         } else {
-            let all = try await versioned.fetchVersioned(type: P.recordType)
-            guard all.count <= 1 else { throw CloudSyncPayloadError.ambiguousProfiles }
-            if let remote = all.first { _ = try validatedRemote(remote.record, expectedID: nil) }
-            state = all.first.map(VersionedLookup.found) ?? .missing
+            let ids = try await versioned.discoverVersionedIDs(type: P.recordType)
+            guard ids.count <= 1 else { throw CloudSyncPayloadError.ambiguousProfiles }
+            if let id = ids.first {
+                try Task.checkCancellation()
+                state = try await versioned.fetchVersioned(type: P.recordType, id: id)
+                if case .found(let remote) = state { _ = try validatedRemote(remote.record, expectedID: id) }
+                if case .unreadable(let version) = state, !version.identity.elementsEqual(id.utf8) {
+                    throw CloudSyncPayloadError.inconsistentIdentity
+                }
+            } else {
+                state = .missing
+            }
         }
         try Task.checkCancellation()
 
@@ -194,10 +211,12 @@ extension CloudSyncEngine {
             return .remoteUnreadable(remoteVersion: version)
         case let (.found(remote), base) where base == remote.version:
             guard hasLocalChanges, let local else { return .upToDate(remote.version) }
-            return try await write(local, expecting: remote.version, replacingAllFields: false, using: versioned)
+            // Overwriting a payload this version cannot decode is a repair: full replacement.
+            let repair = try decodedOrNil(remote.record) == nil
+            return try await write(local, expecting: remote.version, replacingAllFields: repair, using: versioned)
         case let (.found(remote), _):
             // A payload this app version cannot decode is unreadable, not fatal.
-            guard let payload = try? decoded(remote.record) else {
+            guard let payload = try decodedOrNil(remote.record) else {
                 return .remoteUnreadable(remoteVersion: remote.version)
             }
             if hasLocalChanges, local != nil {
@@ -217,10 +236,18 @@ extension CloudSyncEngine {
         } catch CloudSyncConflictError.serverRecordChanged(let current?) {
             // Lost a race: report it; never retry or overwrite automatically.
             _ = try validatedRemote(current.record, expectedID: payload.id)
-            guard let remote = try? decoded(current.record) else {
+            guard let remote = try decodedOrNil(current.record) else {
                 return .remoteUnreadable(remoteVersion: current.version)
             }
             return .conflict(remote: remote, remoteVersion: current.version)
         }
+    }
+
+    /// nil only for content this app version cannot decode; integrity errors
+    /// (e.g. payload ID differs from record ID) stay fatal.
+    private func decodedOrNil(_ record: SyncRecord) throws -> P? {
+        do { return try decoded(record) }
+        catch let integrity as CloudSyncPayloadError { throw integrity }
+        catch { return nil }
     }
 }

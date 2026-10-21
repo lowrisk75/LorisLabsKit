@@ -79,6 +79,9 @@ public actor FeedbackClient {
         sending.insert(envelope.clientReportID)
         defer { sending.remove(envelope.clientReportID) }
         if configuration.requiresExactAppAuthorization, try await !isAppAuthorized() { throw FeedbackClientError.appNotAuthorized }
+        // A report already queued and confirmed by the user (consent review) is sent
+        // as confirmed; re-redacting would change what the user approved. Hosts must
+        // only enqueue through this client.
         let confirmed = try await outbox.pending().first { $0.clientReportID == envelope.clientReportID }
         let safeEnvelope = confirmed == envelope ? envelope : try ReportRedactionPipeline().redact(envelope)
         let recoveryToken = try await outbox.enqueue(safeEnvelope)

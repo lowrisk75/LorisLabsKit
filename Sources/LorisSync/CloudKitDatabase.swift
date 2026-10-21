@@ -563,6 +563,35 @@ extension CloudKitDatabase: SharedCloudDatabase {
 // MARK: - Server compare-and-set
 
 extension CloudKitDatabase: VersionedCloudDatabase {
+    public func discoverVersionedIDs(type: String) async throws -> [String] {
+        try SyncRecordValidation.validateType(type)
+        try await ensureZone()
+        let query = CKQuery(recordType: type, predicate: NSPredicate(value: true))
+        let zoneID = zoneID, database = database
+        // System fields only: content this version cannot map cannot block discovery.
+        let collected = try await SyncPageCollector.collect { (cursor: CKQueryOperation.Cursor?) in
+            let page: (matchResults: [(CKRecord.ID, Result<CKRecord, any Error>)],
+                       queryCursor: CKQueryOperation.Cursor?)
+            if let cursor {
+                page = try await database.records(continuingMatchFrom: cursor, desiredKeys: [])
+            } else {
+                page = try await database.records(matching: query, inZoneWith: zoneID, desiredKeys: [])
+            }
+            return SyncResultPage(results: page.matchResults.map { _, result in
+                result.flatMap { record in
+                    Result {
+                        guard record.recordType.utf8.elementsEqual(type.utf8) else {
+                            throw CloudSyncReadError.invalidRecord
+                        }
+                        return record.recordID.recordName
+                    }
+                }
+            }, continuation: page.queryCursor)
+        }
+        try SyncShareResolution.ensureUniqueIDs(collected.values.map { Data($0.utf8) })
+        return collected.values
+    }
+
     public func fetchVersioned(type: String, id: String) async throws -> VersionedLookup {
         try SyncRecordValidation.validateType(type)
         try SyncRecordValidation.validateID(id)
