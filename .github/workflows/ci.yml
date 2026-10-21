@@ -28,7 +28,9 @@ jobs:
       - name: Authorize private LorisFoundation dependency
         env:
           FOUNDATION_DEPLOY_KEY: ${{ secrets.FOUNDATION_DEPLOY_KEY }}
+          GH_API_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           if [ -z "$FOUNDATION_DEPLOY_KEY" ]; then
             echo "::error::Missing FOUNDATION_DEPLOY_KEY secret (read-only deploy key for lowrisk75/LorisFoundation)."
             exit 1
@@ -37,7 +39,11 @@ jobs:
           printf '%s\n' "$FOUNDATION_DEPLOY_KEY" > ~/.ssh/foundation_deploy
           chmod 600 ~/.ssh/foundation_deploy
           # GitHub host keys from its HTTPS API (no trust-on-first-use).
-          curl -fsSL https://api.github.com/meta | python3 -c 'import json,sys; [print("github.com", k) for k in json.load(sys.stdin)["ssh_keys"]]' > ~/.ssh/known_hosts
+          # Authenticated (shared-runner IPs hit the anonymous rate limit), with retries.
+          curl -fsSL --retry 5 --retry-all-errors -H "Authorization: Bearer $GH_API_TOKEN" \
+            https://api.github.com/meta -o "$RUNNER_TEMP/github-meta.json"
+          python3 -c 'import json,sys; keys=json.load(open(sys.argv[1]))["ssh_keys"]; assert keys; [print("github.com", k) for k in keys]' \
+            "$RUNNER_TEMP/github-meta.json" > ~/.ssh/known_hosts
           # ssh config (not core.sshCommand): SwiftPM may set its own GIT_SSH_COMMAND.
           printf 'Host github.com\n  IdentityFile ~/.ssh/foundation_deploy\n  IdentitiesOnly yes\n  StrictHostKeyChecking yes\n' > ~/.ssh/config
           chmod 600 ~/.ssh/config
