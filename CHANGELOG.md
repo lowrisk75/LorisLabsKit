@@ -10,7 +10,7 @@ _Nothing yet._
 
 ### Fixed
 
-- Declare `defaultLocalization: "en"` so French resources (e.g. the "Les autres apps LorisLabs" cross-promotion title) are compiled with every Xcode version; with Xcode 26 the French title fell back to English.
+- Declare `defaultLocalization: "en"`, and make `PortfolioText.title` fall back to its French text when the toolchain did not compile the string catalogue (seen with `swift build` on Xcode 26), so French users never get the English title.
 - CI: private LorisFoundation fetched with a read-only deploy key (`FOUNDATION_DEPLOY_KEY`) instead of a token.
 
 ## [0.10.1] — 2026-10-21

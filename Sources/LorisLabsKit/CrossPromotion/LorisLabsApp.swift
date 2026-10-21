@@ -62,8 +62,13 @@ public extension LorisLabsApp {
 /// Shared labels for hosts that provide their own Settings styling.
 public enum PortfolioText {
     public static func title(locale: Locale = .current) -> String {
+        let key = "More from LorisLabs"
         let language = locale.language.languageCode?.identifier == "fr" ? "fr" : "en"
         let localized = Bundle.module.path(forResource: language, ofType: "lproj").flatMap(Bundle.init(path:)) ?? .module
-        return localized.localizedString(forKey: "More from LorisLabs", value: nil, table: nil)
+        let value = localized.localizedString(forKey: key, value: nil, table: nil)
+        // Some toolchains (e.g. `swift build` with Xcode 26) do not compile the
+        // string catalogue into .lproj resources; never show English to French users.
+        if language == "fr", value == key { return "Les autres apps LorisLabs" }
+        return value
     }
 }
