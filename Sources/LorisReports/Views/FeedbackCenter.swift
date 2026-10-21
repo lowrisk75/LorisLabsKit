@@ -1,3 +1,5 @@
+// Screens target iOS/macOS/visionOS; tvOS/watchOS keep the non-UI layers.
+#if !os(tvOS) && !os(watchOS)
 import SwiftUI
 
 /// A native support surface shared by all apps; conversations require no user account.
@@ -345,3 +347,5 @@ private struct FeedbackConversationView: View {
         catch { pendingReply = try? await client.pendingReply(for: ticket); self.error = t("Modification non confirmée. Actualisez.", "Change not confirmed. Please refresh.") }
     }
 }
+
+#endif

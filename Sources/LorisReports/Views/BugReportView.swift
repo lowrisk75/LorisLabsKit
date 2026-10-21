@@ -1,3 +1,5 @@
+// Screens target iOS/macOS/visionOS; tvOS/watchOS keep the non-UI layers.
+#if !os(tvOS) && !os(watchOS)
 import SwiftUI
 
 /// Top-level entry point for the bug report flow. Routes to the AI-powered
@@ -24,3 +26,5 @@ public struct BugReportView: View {
         }
     }
 }
+
+#endif

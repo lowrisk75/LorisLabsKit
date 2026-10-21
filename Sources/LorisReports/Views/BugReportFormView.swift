@@ -1,3 +1,5 @@
+// Screens target iOS/macOS/visionOS; tvOS/watchOS keep the non-UI layers.
+#if !os(tvOS) && !os(watchOS)
 import SwiftUI
 
 /// V1 static-form fallback — used on devices that can't run Foundation Models
@@ -266,3 +268,5 @@ public struct BugReportFormView: View {
         return out.joined(separator: "\n")
     }
 }
+
+#endif

@@ -1,5 +1,5 @@
 import Foundation
-#if canImport(FoundationModels)
+#if canImport(FoundationModels) && (os(iOS) || os(macOS) || os(visionOS))
 import FoundationModels
 #endif
 
@@ -50,7 +50,7 @@ public struct GuidedSupportAssistant: SupportAssistantEngine {
 public actor SupportAssistant {
     private let engine: any SupportAssistantEngine
     public init(engine: (any SupportAssistantEngine)? = nil) {
-        #if canImport(FoundationModels)
+        #if canImport(FoundationModels) && (os(iOS) || os(macOS) || os(visionOS))
         if #available(iOS 26, macOS 26, visionOS 26, *) {
             self.engine = engine ?? AppleLocalSupportAssistant()
         } else { self.engine = engine ?? GuidedSupportAssistant() }
@@ -77,7 +77,7 @@ public actor SupportAssistant {
     }
 }
 
-#if canImport(FoundationModels)
+#if canImport(FoundationModels) && (os(iOS) || os(macOS) || os(visionOS))
 @available(iOS 26, macOS 26, visionOS 26, *)
 @Generable
 private struct LocalSupportAnswer {

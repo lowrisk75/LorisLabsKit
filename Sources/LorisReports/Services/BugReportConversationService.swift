@@ -2,7 +2,7 @@ import Foundation
 import os
 import SwiftUI
 
-#if canImport(FoundationModels)
+#if canImport(FoundationModels) && (os(iOS) || os(macOS) || os(visionOS))
 import FoundationModels
 #endif
 
@@ -36,7 +36,7 @@ public final class BugReportConversationService {
     public private(set) var triageOutcome: BugTriage?
     public private(set) var lastError: String?
 
-    #if canImport(FoundationModels)
+    #if canImport(FoundationModels) && (os(iOS) || os(macOS) || os(visionOS))
     private var session: LanguageModelSession?
     #endif
 
@@ -53,7 +53,7 @@ public final class BugReportConversationService {
     }
 
     private func bootstrapSession() {
-        #if canImport(FoundationModels)
+        #if canImport(FoundationModels) && (os(iOS) || os(macOS) || os(visionOS))
         guard #available(iOS 26, macOS 26, visionOS 26, *) else { return }
 
         // Combine the package's generic tools with the host's domain tools.
@@ -95,7 +95,7 @@ public final class BugReportConversationService {
     // MARK: Internal — turn execution
 
     private func respond(to userText: String) async {
-        #if canImport(FoundationModels)
+        #if canImport(FoundationModels) && (os(iOS) || os(macOS) || os(visionOS))
         guard #available(iOS 26, macOS 26, visionOS 26, *), let session else {
             messages.append(.assistant(text: String(localized: "Apple Intelligence is unavailable on this device.", bundle: .module)))
             return

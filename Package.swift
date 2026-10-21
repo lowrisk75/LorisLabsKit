@@ -25,7 +25,8 @@ let package = Package(
         .library(name: "LorisDesignCore", targets: ["LorisDesignCore"]),
     ],
     dependencies: [
-        .package(path: "../LorisFoundation"),
+        // Published release; for side-by-side development use `swift package edit`.
+        .package(url: "https://github.com/lowrisk75/LorisFoundation.git", from: "0.2.0"),
     ],
     targets: [
         .target(name: "LorisLabsKit", dependencies: [.product(name: "LorisSecurity", package: "LorisFoundation")], resources: [.process("Resources")]),

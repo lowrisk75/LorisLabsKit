@@ -1,3 +1,5 @@
+// Screens target iOS/macOS/visionOS; tvOS/watchOS keep the non-UI layers.
+#if !os(tvOS) && !os(watchOS)
 import SwiftUI
 
 /// Final consent gate for direct delivery. Merely presenting this view performs no network request.
@@ -159,3 +161,5 @@ private extension ReportDataCategory {
         }
     }
 }
+
+#endif

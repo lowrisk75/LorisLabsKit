@@ -10,6 +10,12 @@ _Nothing yet._
 
 **Breaking:** LorisSync sharing is invite-only by default and several protocols gained requirements (see Sync integrity closure below and `Documentation/SYNC-CLOSURE.md`). Requires LorisFoundation 0.2.0.
 
+### Distribution fixes
+
+- LorisFoundation is now a published dependency (`from: "0.2.0"`) instead of a local path, so the package resolves for apps and CI.
+- LorisReports now builds for every declared platform: its screens are iOS/macOS/visionOS-only (tvOS/watchOS keep models, transport and redaction); Foundation Models features stay on iOS/macOS/visionOS. Previously tvOS/watchOS never compiled.
+- Full suite: 268 tests pass in Debug and Release (29 XCTest + 239 Swift Testing, 8 iCloud-Keychain tests skipped); generic iOS/tvOS/watchOS/visionOS Simulator builds of all targets succeed.
+
 ### Sync integrity closure, 2026-10-21
 
 - **Behaviour change:** physical data deletion is disabled by default (`CloudSyncPhysicalDeletionPolicy.disabled`, error `physicalDeletionDisabled`, checked before any native/provider call). The earlier preflight requires explicit `.allowNonAtomicPreflight` and remains non-atomic. `stopSharing` is unaffected.

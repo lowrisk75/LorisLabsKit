@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-#if canImport(FoundationModels)
+#if canImport(FoundationModels) && (os(iOS) || os(macOS) || os(visionOS))
 import FoundationModels
 #endif
 
@@ -82,7 +82,7 @@ public enum BugTriageService {
     """
 
     private static func runAI(description: String, language: String) async -> BugTriage? {
-        #if canImport(FoundationModels)
+        #if canImport(FoundationModels) && (os(iOS) || os(macOS) || os(visionOS))
         guard #available(iOS 26, macOS 26, visionOS 26, *) else { return nil }
         let userPrompt = """
         Triage this user bug report (language: \(language)):
@@ -217,7 +217,7 @@ public enum BugTriageService {
 
     /// Whether the AI path is available on this device.
     public static var aiIsAvailable: Bool {
-        #if canImport(FoundationModels)
+        #if canImport(FoundationModels) && (os(iOS) || os(macOS) || os(visionOS))
         if #available(iOS 26, macOS 26, visionOS 26, *) {
             return SystemLanguageModel.default.isAvailable
         }

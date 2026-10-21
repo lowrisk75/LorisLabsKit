@@ -1,3 +1,5 @@
+// Screens target iOS/macOS/visionOS; tvOS/watchOS keep the non-UI layers.
+#if !os(tvOS) && !os(watchOS)
 import SwiftUI
 
 /// A staged migration for legacy help surfaces. Main-app gates remain independent
@@ -40,3 +42,5 @@ private enum FeedbackMigrationOwner {
         return client
     }
 }
+
+#endif

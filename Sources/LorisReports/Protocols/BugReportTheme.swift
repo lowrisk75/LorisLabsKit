@@ -79,7 +79,7 @@ public struct DefaultBugReportTheme: BugReportTheme {
 // UIKit has it (iOS / visionOS), AppKit names them differently. We bridge
 // here so the public theme stays SwiftUI-only on every platform.
 
-#if canImport(UIKit) && !os(watchOS)
+#if canImport(UIKit) && !os(watchOS) && !os(tvOS)
 import UIKit
 private let _systemBackground = Color(uiColor: .systemBackground)
 private let _secondarySystemBackground = Color(uiColor: .secondarySystemBackground)

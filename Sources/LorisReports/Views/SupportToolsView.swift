@@ -1,3 +1,5 @@
+// Screens target iOS/macOS/visionOS; tvOS/watchOS keep the non-UI layers.
+#if !os(tvOS) && !os(watchOS)
 import SwiftUI
 
 private func supportText(_ fr: String, _ en: String) -> String {
@@ -169,3 +171,5 @@ struct SupportDiagnosticReview: View {
         }
     }
 }
+
+#endif

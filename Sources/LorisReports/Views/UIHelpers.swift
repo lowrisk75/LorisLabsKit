@@ -1,3 +1,5 @@
+// Screens target iOS/macOS/visionOS; tvOS/watchOS keep the non-UI layers.
+#if !os(tvOS) && !os(watchOS)
 import SwiftUI
 
 #if canImport(UIKit) && !os(watchOS)
@@ -71,7 +73,8 @@ struct PrimaryButton: View {
 
 // MARK: - ShareSheet
 
-#if canImport(UIKit) && !os(watchOS)
+// UIActivityViewController exists on iOS/visionOS only (not tvOS/watchOS).
+#if canImport(UIKit) && (os(iOS) || os(visionOS))
 struct ShareSheet: UIViewControllerRepresentable {
     let items: [Any]
 
@@ -95,9 +98,14 @@ struct ShareSheet: View {
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
             if let url = items.first as? URL {
+                #if os(watchOS) || os(tvOS)
+                Text(url.lastPathComponent)
+                    .font(.caption)
+                #else
                 Text(url.lastPathComponent)
                     .font(.caption)
                     .textSelection(.enabled)
+                #endif
             }
         }
         .padding()
@@ -111,3 +119,5 @@ extension BugSeverity {
     /// Convenience for compact display.
     var label: String { "\(emoji) \(displayName)" }
 }
+
+#endif

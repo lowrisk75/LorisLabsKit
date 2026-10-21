@@ -1,6 +1,6 @@
 import Foundation
 
-#if canImport(FoundationModels)
+#if canImport(FoundationModels) && (os(iOS) || os(macOS) || os(visionOS))
 import FoundationModels
 #endif
 
@@ -48,7 +48,7 @@ public protocol BugReportContextProvider {
     ///
     /// Available only on iOS 26+/macOS 26+/visionOS 26+ because the `Tool`
     /// protocol itself ships with Foundation Models (iOS 26).
-    #if canImport(FoundationModels)
+    #if canImport(FoundationModels) && (os(iOS) || os(macOS) || os(visionOS))
     @available(iOS 26, macOS 26, visionOS 26, *)
     var domainTools: [any Tool] { get }
     #endif

@@ -1,3 +1,5 @@
+// Screens target iOS/macOS/visionOS; tvOS/watchOS keep the non-UI layers.
+#if !os(tvOS) && !os(watchOS)
 import SwiftUI
 
 /// V2 chat-style bug report flow powered by Apple Intelligence + tool
@@ -242,3 +244,5 @@ public struct BugReportConversationView: View {
         }
     }
 }
+
+#endif
