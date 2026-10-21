@@ -6,6 +6,13 @@ All notable changes to LorisLabsKit are documented here.
 
 _Nothing yet._
 
+## [0.10.2] — 2026-10-21
+
+### Fixed
+
+- Declare `defaultLocalization: "en"` so French resources (e.g. the "Les autres apps LorisLabs" cross-promotion title) are compiled with every Xcode version; with Xcode 26 the French title fell back to English.
+- CI: private LorisFoundation fetched with a read-only deploy key (`FOUNDATION_DEPLOY_KEY`) instead of a token.
+
 ## [0.10.1] — 2026-10-21
 
 ### Fixed (final independent review of 0.10.0)

@@ -1,6 +1,6 @@
 // swift-tools-version: 6.0
 // LorisLabsKit — the LorisLabs app chassis: shared foundation for the whole portfolio
-// Version: 0.10.1 (see CHANGELOG.md)
+// Version: 0.10.2 (see CHANGELOG.md)
 //
 // v2 layout — one repo, modular products; apps import only what they use:
 //   LorisLabsKit    review prompts, cross-promo, paywall, referral, trial + license (existing consumers keep working)
@@ -11,6 +11,7 @@ import PackageDescription
 
 let package = Package(
     name: "LorisLabsKit",
+    defaultLocalization: "en",
     platforms: [
         .iOS(.v17),
         .macOS(.v14),
