@@ -38,7 +38,9 @@ jobs:
           chmod 600 ~/.ssh/foundation_deploy
           # GitHub host keys from its HTTPS API (no trust-on-first-use).
           curl -fsSL https://api.github.com/meta | python3 -c 'import json,sys; [print("github.com", k) for k in json.load(sys.stdin)["ssh_keys"]]' > ~/.ssh/known_hosts
-          git config --global core.sshCommand "ssh -i ~/.ssh/foundation_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+          # ssh config (not core.sshCommand): SwiftPM may set its own GIT_SSH_COMMAND.
+          printf 'Host github.com\n  IdentityFile ~/.ssh/foundation_deploy\n  IdentitiesOnly yes\n  StrictHostKeyChecking yes\n' > ~/.ssh/config
+          chmod 600 ~/.ssh/config
           git config --global url."git@github.com:lowrisk75/LorisFoundation".insteadOf \
             "https://github.com/lowrisk75/LorisFoundation"
 
