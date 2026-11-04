@@ -4,7 +4,16 @@ All notable changes to LorisLabsKit are documented here.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- LorisSync: `ModelContext.saveReporting(removingOnFailure:)` and `saveOutcome(removingOnFailure:report:) -> SaveOutcome` replace `try? context.save()`. A refused save removes only the caller's still-unsaved insertions (no global rollback) and throws or returns `.refused(error)`. Tested on a real SQLite store reopened with `allowsSave: false`. See `Documentation/SWIFTDATA-SAVE-REPORTING.md`.
+- LorisLabsKit: `LorisDevUnlock.matches(password:bundleId:expectedHash:)`, the pure check `unlock(password:)` now runs.
+
+### Fixed
+
+- LorisLabsKit: `ReferralHMAC.verify` accepted uppercase hex in validation but then compared it byte-for-byte with the lowercase `sign` output, so valid uppercase or mixed-case signatures were rejected. The signature is now lowercased before the constant-time comparison (`LorisSecurity.ConstantTime`).
+- LorisLabsKit: `LorisDevUnlock.unlock(password:)` compared digests with `==` (not constant time, case-sensitive). It now validates `expectedHash` as 64 hex digits and compares the lowercase hex in constant time; an uppercase `expectedHash` unlocks.
+- LorisLabsKit: the paywall's offline fallback cached only "paid", so offline a lifetime purchase came back as `.subscribed(expiration: nil)` and `purchasedProductIDs` / `highestTierRank` were empty, downgrading tiered apps. The cache now stores the entitlement kind, owned products and subscription expiration (`loris.paywall.cached.entitlement`); offline restore keeps `.lifetime`, the products and the tier. The legacy keys are still written, and still read when no full record exists, so upgrades and rollbacks keep offline access.
 
 ## [0.10.2] — 2026-10-21
 

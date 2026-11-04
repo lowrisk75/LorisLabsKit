@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import LorisSecurity
 import Security
 
 /// Debug-only developer unlock — the canonical form of the 84-line
@@ -38,6 +39,17 @@ public final class LorisDevUnlock {
             .map { String(format: "%02x", $0) }.joined()
     }
 
+    /// Whether `password` hashes to `expectedHash` for `bundleId`. Pure: no
+    /// keychain access. `expectedHash` is accepted in any hex case; the check
+    /// runs in constant time over the lowercase hex digest.
+    public nonisolated static func matches(password: String, bundleId: String, expectedHash: String) -> Bool {
+        guard expectedHash.utf8.count == 64,
+              expectedHash.utf8.allSatisfy({ (0x30...0x39).contains($0) || (0x41...0x46).contains($0) || (0x61...0x66).contains($0) })
+        else { return false }
+        return ConstantTime.equals(Data(digest(bundleId: bundleId, password: password).utf8),
+                                   Data(expectedHash.lowercased().utf8))
+    }
+
     public var isUnlocked: Bool {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -51,7 +63,7 @@ public final class LorisDevUnlock {
     /// flag in the keychain. Returns whether the app is now unlocked.
     @discardableResult
     public func unlock(password: String) -> Bool {
-        guard Self.digest(bundleId: bundleId, password: password) == expectedHash else { return false }
+        guard Self.matches(password: password, bundleId: bundleId, expectedHash: expectedHash) else { return false }
         let item: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: keychainKey,

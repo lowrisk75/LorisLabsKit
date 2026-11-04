@@ -8,6 +8,10 @@ Latest release: **0.10.2** (requires LorisFoundation 0.2.x, a private repository
 
 ## What's inside
 
+### SwiftData saves that report refusals (local, unreleased)
+
+`LorisSync` adds `ModelContext.saveReporting(removingOnFailure:)` (throws) and `saveOutcome(removingOnFailure:report:) -> SaveOutcome`, the replacement for `try? context.save()`. On refusal they remove only the objects the caller inserted, never a global rollback, and surface the error. See [FR/EN contract](Documentation/SWIFTDATA-SAVE-REPORTING.md). No app migration implied.
+
 ### Sync integrity closure (local, unreleased)
 
 **Behaviour change:** `CloudKitDatabase` now refuses physical data deletion by default (`CloudSyncDeletionError.physicalDeletionDisabled`); the non-atomic preflight below requires an explicit `.allowNonAtomicPreflight`. `CloudSyncEngine` rejects overlapping operations with `operationInProgress` (no queue). Also: outgoing record validation (ASCII name subset, reserved fields, finite values), byte-exact identities, single-profile checks, existing-share permission mismatch errors and an additive host-scoped `ScopedSyncCheckpoint`, which is not account authentication. Sharing is invite-only by default (add people with `SyncShareItem` + SwiftUI `ShareLink`; public links are opt-in); prefer `revokeOwnedShare` / `leaveShare`. Use `synchronize` (server compare-and-set, explicit conflicts) instead of clock-based `reconcile`. Unreadable records are quarantined instead of stalling sync. See [FR/EN contract and limits](Documentation/SYNC-CLOSURE.md).

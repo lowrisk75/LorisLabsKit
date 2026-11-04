@@ -20,4 +20,33 @@ import Testing
         // Mismatch is rejected before any keychain write.
         #expect(unlock.unlock(password: "wrong") == false)
     }
+
+    // `matches` is the pure check `unlock` runs before touching the keychain.
+    @Test func matchesAcceptsRightPasswordOnly() {
+        let known = LorisDevUnlock.digest(bundleId: "com.test.app", password: "secret")
+        #expect(LorisDevUnlock.matches(password: "secret", bundleId: "com.test.app", expectedHash: known))
+        #expect(!LorisDevUnlock.matches(password: "wrong", bundleId: "com.test.app", expectedHash: known))
+        #expect(!LorisDevUnlock.matches(password: "secret", bundleId: "com.other.app", expectedHash: known))
+    }
+
+    // A hash pasted from `shasum` tooling or a doc in uppercase must still unlock.
+    @Test func matchesIsCaseInsensitiveOnExpectedHash() {
+        let known = LorisDevUnlock.digest(bundleId: "com.test.app", password: "secret")
+        #expect(known != known.uppercased())
+        #expect(LorisDevUnlock.matches(password: "secret", bundleId: "com.test.app", expectedHash: known.uppercased()))
+        #expect(!LorisDevUnlock.matches(password: "wrong", bundleId: "com.test.app", expectedHash: known.uppercased()))
+    }
+
+    @Test func matchesRejectsMalformedExpectedHash() {
+        #expect(!LorisDevUnlock.matches(password: "secret", bundleId: "com.test.app", expectedHash: ""))
+        #expect(!LorisDevUnlock.matches(password: "secret", bundleId: "com.test.app", expectedHash: "abc"))
+        let known = LorisDevUnlock.digest(bundleId: "com.test.app", password: "secret")
+        #expect(!LorisDevUnlock.matches(password: "secret", bundleId: "com.test.app", expectedHash: " " + known))
+    }
+
+    @Test @MainActor func wrongPasswordRejectedWithUppercaseExpectedHash() {
+        let known = LorisDevUnlock.digest(bundleId: "com.test.app", password: "secret").uppercased()
+        let unlock = LorisDevUnlock(expectedHash: known, bundleId: "com.test.app")
+        #expect(unlock.unlock(password: "wrong") == false)
+    }
 }
