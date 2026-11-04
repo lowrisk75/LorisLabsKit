@@ -14,6 +14,7 @@ All notable changes to LorisLabsKit are documented here.
 - LorisLabsKit: `ReferralHMAC.verify` accepted uppercase hex in validation but then compared it byte-for-byte with the lowercase `sign` output, so valid uppercase or mixed-case signatures were rejected. The signature is now lowercased before the constant-time comparison (`LorisSecurity.ConstantTime`).
 - LorisLabsKit: `LorisDevUnlock.unlock(password:)` compared digests with `==` (not constant time, case-sensitive). It now validates `expectedHash` as 64 hex digits and compares the lowercase hex in constant time; an uppercase `expectedHash` unlocks.
 - LorisLabsKit: the paywall's offline fallback cached only "paid", so offline a lifetime purchase came back as `.subscribed(expiration: nil)` and `purchasedProductIDs` / `highestTierRank` were empty, downgrading tiered apps. The cache now stores the entitlement kind, owned products and subscription expiration (`loris.paywall.cached.entitlement`); offline restore keeps `.lifetime`, the products and the tier. The legacy keys are still written, and still read when no full record exists, so upgrades and rollbacks keep offline access.
+- LorisLabsKit: the paywall entitlement decision is now the pure `LorisPaywallStore.resolveEntitlement(...)` (internal), tested online and offline: lifetime, tiered subscriptions, revoked/expired, stale cache, StoreKit answering while unreachable. Behaviour unchanged from the offline-cache fix. A real `SKTestSession` suite still needs a host app: under `swift test` it fails with `invalidApp`.
 
 ## [0.10.2] — 2026-10-21
 

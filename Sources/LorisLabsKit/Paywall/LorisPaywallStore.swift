@@ -256,56 +256,35 @@ public final class LorisPaywallStore {
     // MARK: Entitlements
 
     public func refreshEntitlements() async {
-        var isLifetime = false
-        var subscriptionExpiry: Date?
-        var foundPaid = false
-        var owned: Set<String> = []
-
+        var transactions: [EntitlementTransactionSnapshot] = []
         for await result in Transaction.currentEntitlements {
             guard let transaction = try? Self.checkVerified(result) else { continue }
-            guard transaction.revocationDate == nil else { continue }
-
-            owned.insert(transaction.productID)
-
-            if configuration.lifetimeProductIDs.contains(transaction.productID) {
-                isLifetime = true
-                foundPaid = true
-            } else if let expiry = transaction.expirationDate {
-                if expiry > Date() {
-                    foundPaid = true
-                    subscriptionExpiry = max(subscriptionExpiry ?? expiry, expiry)
-                }
-            } else {
-                // Non-consumable not declared as lifetime — still a purchase.
-                isLifetime = true
-                foundPaid = true
-            }
-        }
-
-        if foundPaid {
-            subscriptionExpiration = subscriptionExpiry
-            purchasedProductIDs = owned
-            entitlementCache.save(CachedPaidEntitlement(
-                kind: isLifetime ? .lifetime : .subscription,
-                productIDs: owned,
-                subscriptionExpiration: isLifetime ? nil : subscriptionExpiry,
-                verifiedAt: Date()
+            transactions.append(EntitlementTransactionSnapshot(
+                productID: transaction.productID,
+                expirationDate: transaction.expirationDate,
+                revocationDate: transaction.revocationDate
             ))
-            entitlement = isLifetime ? .lifetime : .subscribed(expiration: subscriptionExpiry)
-        } else if !isStoreReachable,
-                  let cached = entitlementCache.freshEntitlement(now: Date(), tolerance: configuration.offlineTolerance) {
-            // Offline and previously paid — keep the same kind and tier rather
-            // than locking the user out of (or downgrading) an app they bought.
-            subscriptionExpiration = cached.subscriptionExpiration
-            purchasedProductIDs = cached.productIDs
-            entitlement = cached.entitlementState
-        } else {
-            subscriptionExpiration = subscriptionExpiry
-            purchasedProductIDs = owned
-            entitlementCache.save(nil, verifiedAt: Date())
-            entitlement = trialState()
         }
-        highestTierRank = purchasedProductIDs.compactMap { configuration.productTierRanks[$0] }.max() ?? 0
+
+        let now = Date()
+        let cache = entitlementCache
+        let resolution = Self.resolveEntitlement(
+            transactions: transactions,
+            configuration: configuration,
+            isStoreReachable: isStoreReachable,
+            freshCache: isStoreReachable ? nil : cache.freshEntitlement(now: now, tolerance: configuration.offlineTolerance),
+            now: now
+        )
+
+        switch resolution.cacheUpdate {
+        case .store(let paid): cache.save(paid)
+        case .clear: cache.save(nil, verifiedAt: now)
+        case .keep: break
+        }
+        subscriptionExpiration = resolution.subscriptionExpiration
+        purchasedProductIDs = resolution.purchasedProductIDs
+        highestTierRank = resolution.highestTierRank
+        entitlement = resolution.entitlement ?? trialState()
 
         // Set last so an observer reacting to the flag also sees fresh state.
         entitlementsLoaded = true
