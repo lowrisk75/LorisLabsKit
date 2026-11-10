@@ -1,0 +1,51 @@
+# Minimal macOS host so StoreKitTest (SKTestSession) can run: it needs an app
+# with a bundle identifier and fails with `invalidApp` under `swift test`.
+# Generate and run with Scripts/test-storekit.sh. The .xcodeproj is not committed.
+name: PaywallTestHost
+options:
+  bundleIdPrefix: com.lorislab.kit
+  deploymentTarget:
+    macOS: "14.0"
+packages:
+  LorisLabsKit:
+    path: ..
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+    DEVELOPMENT_TEAM: ""
+    ENABLE_HARDENED_RUNTIME: NO
+targets:
+  PaywallTestHost:
+    type: application
+    platform: macOS
+    sources: [App]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lorislab.kit.paywalltesthost
+        GENERATE_INFOPLIST_FILE: YES
+  PaywallStoreKitTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: StoreKitTests
+        excludes: ["*.storekit"]
+      - path: StoreKitTests/PaywallTest.storekit
+        buildPhase: resources
+    dependencies:
+      - target: PaywallTestHost
+      - package: LorisLabsKit
+        product: LorisLabsKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lorislab.kit.paywalltesthost.tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  PaywallTestHost:
+    build:
+      targets:
+        PaywallTestHost: all
+        PaywallStoreKitTests: [test]
+    test:
+      targets: [PaywallStoreKitTests]

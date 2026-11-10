@@ -108,6 +108,20 @@ LorisLabsPaywallView(
 )
 ```
 
+### Trial and developer unlock
+
+`LorisTrialService` is the single trial engine (`LorisPaywallStore` uses it; `TrialManager` is deprecated and now delegates to it, keeping its existing keychain item). Setting the clock back no longer extends a trial: the latest time seen is stored beside the start date.
+
+`LorisDevUnlock` (keep it `#if DEBUG`) now recommends a salted PBKDF2-SHA256 hash. Generate it once and inject it:
+
+```swift
+// Once, in a playground: paste the output into the app's DEBUG config.
+print(LorisDevUnlock.makeExpectedHash(password: "…", bundleId: "com.lorislab.app"))
+// pbkdf2-sha256$600000$<salt hex>$<hash hex>
+```
+
+The legacy unsalted `digest(bundleId:password:)` hash is still accepted. The unlock flag is stored under the `<bundleId>.dev-unlock` keychain service; a flag written by an older build is still read and cleared by `lock()`.
+
 You can also build `PaywallTier` directly from a StoreKit `Product`:
 ```swift
 let tier = PaywallTier(product: product, isPopular: true, saveBadge: "Save 44%")
@@ -194,6 +208,14 @@ The review thresholds can be configured per app. Keep enough engagement and time
 ```bash
 swift test
 ```
+
+The paywall's StoreKit path (purchase, refund, offline restore with tiers) runs against StoreKitTest in a small macOS host app, because `SKTestSession` needs an app bundle and fails with `invalidApp` under the SwiftPM test runner. It needs XcodeGen and writes test items to the login keychain under a unique service, deleted after each test:
+
+```bash
+Scripts/test-storekit.sh
+```
+
+The very first run after generating the host app can fail every purchase; run it again. This is local evidence only, not sandbox, device or App Store proof.
 
 ## License
 

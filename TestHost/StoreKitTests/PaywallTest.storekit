@@ -1,0 +1,40 @@
+{
+  "identifier" : "4C5A0E2B-1B7D-4E55-9A51-5D0F7A1C0001",
+  "nonRenewingSubscriptions" : [],
+  "products" : [
+    {
+      "displayPrice" : "29.99",
+      "familyShareable" : false,
+      "internalID" : "100000001",
+      "localizations" : [ { "description" : "Lifetime access", "displayName" : "Lifetime", "locale" : "en_US" } ],
+      "productID" : "com.lorislab.kit.test.lifetime",
+      "referenceName" : "Lifetime",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : { "_failTransactionsEnabled" : false },
+  "subscriptionGroups" : [
+    {
+      "id" : "20000001",
+      "localizations" : [],
+      "name" : "Pro",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [], "codeOffers" : [], "displayPrice" : "2.99", "familyShareable" : false,
+          "groupNumber" : 2, "internalID" : "100000002", "introductoryOffer" : null,
+          "localizations" : [ { "description" : "Pro monthly", "displayName" : "Pro Monthly", "locale" : "en_US" } ],
+          "productID" : "com.lorislab.kit.test.pro.monthly", "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Pro Monthly", "subscriptionGroupID" : "20000001", "type" : "RecurringSubscription", "winbackOffers" : []
+        },
+        {
+          "adHocOffers" : [], "codeOffers" : [], "displayPrice" : "4.99", "familyShareable" : false,
+          "groupNumber" : 1, "internalID" : "100000003", "introductoryOffer" : null,
+          "localizations" : [ { "description" : "Plus monthly", "displayName" : "Plus Monthly", "locale" : "en_US" } ],
+          "productID" : "com.lorislab.kit.test.plus.monthly", "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Plus Monthly", "subscriptionGroupID" : "20000001", "type" : "RecurringSubscription", "winbackOffers" : []
+        }
+      ]
+    }
+  ],
+  "version" : { "major" : 4, "minor" : 0 }
+}

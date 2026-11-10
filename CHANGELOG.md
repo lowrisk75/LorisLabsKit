@@ -6,11 +6,16 @@ All notable changes to LorisLabsKit are documented here.
 
 ### Added
 
+- LorisLabsKit: `LorisDevUnlock.makeExpectedHash(password:bundleId:iterations:)` produces a salted PBKDF2-SHA256 hash (`pbkdf2-sha256$<iterations>$<salt>$<hash>`, random 16-byte salt, 600,000 iterations by default). `matches` accepts it (at least 10,000 iterations) as well as the legacy unsalted digest.
+- StoreKitTest suite for `LorisPaywallStore` in `TestHost/` (XcodeGen macOS host app), run with `Scripts/test-storekit.sh`: lifetime and tiered purchases, refund, offline restore of lifetime and tier, cache cleared when verified unpaid.
 - LorisSync: `ModelContext.saveReporting(removingOnFailure:)` and `saveOutcome(removingOnFailure:report:) -> SaveOutcome` replace `try? context.save()`. A refused save removes only the caller's still-unsaved insertions (no global rollback) and throws or returns `.refused(error)`. Tested on a real SQLite store reopened with `allowsSave: false`. See `Documentation/SWIFTDATA-SAVE-REPORTING.md`.
 - LorisLabsKit: `LorisDevUnlock.matches(password:bundleId:expectedHash:)`, the pure check `unlock(password:)` now runs.
 
 ### Fixed
 
+- LorisLabsKit: setting the clock back no longer extends a trial. `LorisTrialService` keeps the latest time seen beside the start date (`<startKey>.lastSeen`) and measures elapsed time against it; a clock before the start never grants more than the full duration. `reset()` clears both.
+- LorisLabsKit: one trial engine. `TrialManager` is deprecated and delegates to `LorisTrialService`, reading and writing its existing item (`<bundleId>.trial` / `started-at`, whole seconds) so running trials carry over.
+- LorisLabsKit: `LorisDevUnlock` stores its unlock flag under the `<bundleId>.dev-unlock` keychain service instead of an account-only item; the old flag is still read and cleared by `lock()`. A mismatching password writes nothing.
 - LorisLabsKit: `ReferralHMAC.verify` accepted uppercase hex in validation but then compared it byte-for-byte with the lowercase `sign` output, so valid uppercase or mixed-case signatures were rejected. The signature is now lowercased before the constant-time comparison (`LorisSecurity.ConstantTime`).
 - LorisLabsKit: `LorisDevUnlock.unlock(password:)` compared digests with `==` (not constant time, case-sensitive). It now validates `expectedHash` as 64 hex digits and compares the lowercase hex in constant time; an uppercase `expectedHash` unlocks.
 - LorisLabsKit: the paywall's offline fallback cached only "paid", so offline a lifetime purchase came back as `.subscribed(expiration: nil)` and `purchasedProductIDs` / `highestTierRank` were empty, downgrading tiered apps. The cache now stores the entitlement kind, owned products and subscription expiration (`loris.paywall.cached.entitlement`); offline restore keeps `.lifetime`, the products and the tier. The legacy keys are still written, and still read when no full record exists, so upgrades and rollbacks keep offline access.
