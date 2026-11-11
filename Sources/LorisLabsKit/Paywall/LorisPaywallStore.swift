@@ -68,8 +68,7 @@ public final class LorisPaywallStore {
     /// "unreachable" rather than "cancelled".
     private var isStoreReachable = true
 
-    private static let cachedEntitlementKey = "loris.paywall.cached.paid"
-    private static let lastVerifiedKey = "loris.paywall.lastVerified"
+    private var entitlementCache: PaywallEntitlementCache { PaywallEntitlementCache(keychain: keychain) }
 
     // MARK: Lifecycle
 
@@ -257,47 +256,35 @@ public final class LorisPaywallStore {
     // MARK: Entitlements
 
     public func refreshEntitlements() async {
-        var isLifetime = false
-        var subscriptionExpiry: Date?
-        var foundPaid = false
-        var owned: Set<String> = []
-
+        var transactions: [EntitlementTransactionSnapshot] = []
         for await result in Transaction.currentEntitlements {
             guard let transaction = try? Self.checkVerified(result) else { continue }
-            guard transaction.revocationDate == nil else { continue }
-
-            owned.insert(transaction.productID)
-
-            if configuration.lifetimeProductIDs.contains(transaction.productID) {
-                isLifetime = true
-                foundPaid = true
-            } else if let expiry = transaction.expirationDate {
-                if expiry > Date() {
-                    foundPaid = true
-                    subscriptionExpiry = max(subscriptionExpiry ?? expiry, expiry)
-                }
-            } else {
-                // Non-consumable not declared as lifetime — still a purchase.
-                isLifetime = true
-                foundPaid = true
-            }
+            transactions.append(EntitlementTransactionSnapshot(
+                productID: transaction.productID,
+                expirationDate: transaction.expirationDate,
+                revocationDate: transaction.revocationDate
+            ))
         }
 
-        subscriptionExpiration = subscriptionExpiry
-        purchasedProductIDs = owned
-        highestTierRank = owned.compactMap { configuration.productTierRanks[$0] }.max() ?? 0
+        let now = Date()
+        let cache = entitlementCache
+        let resolution = Self.resolveEntitlement(
+            transactions: transactions,
+            configuration: configuration,
+            isStoreReachable: isStoreReachable,
+            freshCache: isStoreReachable ? nil : cache.freshEntitlement(now: now, tolerance: configuration.offlineTolerance),
+            now: now
+        )
 
-        if foundPaid {
-            cachePaidEntitlement(true)
-            entitlement = isLifetime ? .lifetime : .subscribed(expiration: subscriptionExpiry)
-        } else if !isStoreReachable, cachedPaidEntitlementIsFresh() {
-            // Offline and previously paid — keep access rather than locking the
-            // user out of an app they bought.
-            entitlement = .subscribed(expiration: subscriptionExpiry)
-        } else {
-            cachePaidEntitlement(false)
-            entitlement = trialState()
+        switch resolution.cacheUpdate {
+        case .store(let paid): cache.save(paid)
+        case .clear: cache.save(nil, verifiedAt: now)
+        case .keep: break
         }
+        subscriptionExpiration = resolution.subscriptionExpiration
+        purchasedProductIDs = resolution.purchasedProductIDs
+        highestTierRank = resolution.highestTierRank
+        entitlement = resolution.entitlement ?? trialState()
 
         // Set last so an observer reacting to the flag also sees fresh state.
         entitlementsLoaded = true
@@ -368,21 +355,6 @@ public final class LorisPaywallStore {
             return products.first { $0.subscription?.subscriptionGroupID == groupID }?.subscription
         }
         return products.first { $0.subscription != nil }?.subscription
-    }
-
-    // MARK: Offline tolerance
-
-    private func cachePaidEntitlement(_ isPaid: Bool) {
-        try? keychain.save(isPaid ? "1" : "0", forKey: Self.cachedEntitlementKey)
-        try? keychain.save(String(Date().timeIntervalSince1970), forKey: Self.lastVerifiedKey)
-    }
-
-    private func cachedPaidEntitlementIsFresh() -> Bool {
-        guard let cached = try? keychain.string(forKey: Self.cachedEntitlementKey), cached == "1",
-              let raw = try? keychain.string(forKey: Self.lastVerifiedKey),
-              let seconds = TimeInterval(raw) else { return false }
-        let lastVerified = Date(timeIntervalSince1970: seconds)
-        return Date().timeIntervalSince(lastVerified) < configuration.offlineTolerance
     }
 
     // MARK: Consumables

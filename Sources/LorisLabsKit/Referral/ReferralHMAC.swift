@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import LorisSecurity
 
 /// Hex HMAC-SHA256. Matches the worker's `crypto/hmac.ts` byte-for-byte
 /// so signed `/me` responses can be verified client-side.
@@ -19,20 +20,16 @@ public enum ReferralHMAC {
         return mac.map { String(format: "%02x", $0) }.joined()
     }
 
+    /// Hex is case-insensitive: `signatureHex` may be upper, lower or mixed
+    /// case. It is lowercased (ASCII only, after validation) and compared to
+    /// the lowercase `sign` output in constant time.
     public static func verify(secret: String, body: String, signatureHex: String) throws -> Bool {
-        guard signatureHex.count == 64,
+        guard signatureHex.utf8.count == 64,
               signatureHex.allSatisfy({ $0.isHexDigit }) else {
             return false
         }
         let computed = try sign(secret: secret, body: body)
-        // Constant-time comparison via XOR over the hex strings (both are
-        // already same length and known-hex).
-        guard computed.count == signatureHex.count else { return false }
-        var diff: UInt8 = 0
-        for (a, b) in zip(computed.utf8, signatureHex.utf8) {
-            diff |= a ^ b
-        }
-        return diff == 0
+        return ConstantTime.equals(Data(computed.utf8), Data(signatureHex.lowercased().utf8))
     }
 }
 
